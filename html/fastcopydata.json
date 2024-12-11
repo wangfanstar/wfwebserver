@@ -37,7 +37,7 @@ const branchData = {
             },  
             {  
                 label: '文件服务器地址',  
-                type: 'file',  
+                type: 'copy',  
                 content: 'file://test.example.com/testlib/V7R1_SPRING/trunk/'  
             }  
         ]  
@@ -69,7 +69,7 @@ const branchData = {
             },  
             {  
                 label: '文件服务器地址',  
-                type: 'file',  
+                type: 'copy',  
                 content: 'file://test.example.com/testlib/V7R1_D086SP/trunk/'  
             }  
         ]  
@@ -101,7 +101,7 @@ const branchData = {
             },  
             {  
                 label: '文件服务器地址',  
-                type: 'file',  
+                type: 'copy',  
                 content: 'file://test.example.com/testlib/V7R1_D099SP/trunk/'  
             }  
         ]  
