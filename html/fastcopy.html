@@ -406,22 +406,42 @@
         }  
 
         // 设置复制按钮功能  
-        function setupCopyButtons() {  
-            const copyElements = document.querySelectorAll('.copyable');  
-            
-            copyElements.forEach(element => {  
-                element.addEventListener('click', async () => {  
-                    const content = element.dataset.content;  
-                    try {  
-                        await navigator.clipboard.writeText(content);  
-                        showMessage('已复制到剪贴板');  
-                    } catch (err) {  
-                        console.error('复制失败:', err);  
-                        showMessage('复制失败，请手动复制');  
-                    }  
-                });  
-            });  
-        }  
+		async function copyToClipboard(text) {  
+			try {  
+				// 首选 navigator.clipboard API  
+				await navigator.clipboard.writeText(text);  
+				showMessage('已复制到剪贴板');  
+			} catch (err) {  
+				// 降级方案：使用传统的 textarea 方法  
+				const textarea = document.createElement('textarea');  
+				textarea.value = text;  
+				textarea.style.position = 'fixed';  
+				textarea.style.opacity = '0';  
+				document.body.appendChild(textarea);  
+				textarea.select();  
+				
+				try {  
+					document.execCommand('copy');  
+					showMessage('已复制到剪贴板');  
+				} catch (err) {  
+					showMessage('复制失败，请手动复制');  
+				} finally {  
+					document.body.removeChild(textarea);  
+				}  
+			}  
+		}  
+
+		// 修改复制按钮的设置函数  
+		function setupCopyButtons() {  
+			const copyElements = document.querySelectorAll('.copyable');  
+			
+			copyElements.forEach(element => {  
+				element.addEventListener('click', () => {  
+					const content = element.dataset.content;  
+					copyToClipboard(content);  
+				});  
+			});  
+		}   
 
         // 显示提示消息  
         function showMessage(message, duration = 2000) {  
