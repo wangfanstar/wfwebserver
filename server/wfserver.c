@@ -9,7 +9,7 @@
 
 #define BUFFER_SIZE 1024  
 #define DEFAULT_PORT 8081  
-#define DEFAULT_ROOT "./www"  
+#define DEFAULT_ROOT "../html"  
 
 void handle_client(int client_socket) {  
     char buffer[BUFFER_SIZE];  
