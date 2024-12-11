@@ -25,12 +25,14 @@ struct ThreadStats {
     int response_time_count;  
 };  
 
+// 获取当前时间（毫秒）  
 double get_time_ms() {  
     struct timeval tv;  
     gettimeofday(&tv, NULL);  
     return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;  
 }  
 
+// 工作线程函数  
 void* worker_thread(void* arg) {  
     struct ThreadStats* stats = (struct ThreadStats*)arg;  
     char buffer[BUFFER_SIZE];  
@@ -81,6 +83,7 @@ void* worker_thread(void* arg) {
     return NULL;  
 }  
 
+// HTML报告生成函数  
 void write_html_report(const char* filename, struct ThreadStats* thread_stats,   
                       int num_threads, double total_time) {  
     FILE* fp = fopen(filename, "w");  
@@ -107,12 +110,26 @@ void write_html_report(const char* filename, struct ThreadStats* thread_stats,
         }  
     }  
 
+    // 计算统计数据  
+    double min_response_time = all_response_times[0];  
+    double max_response_time = all_response_times[0];  
+    double total_response_time = 0;  
+
+    for (int i = 0; i < total_responses; i++) {  
+        if (all_response_times[i] < min_response_time) min_response_time = all_response_times[i];  
+        if (all_response_times[i] > max_response_time) max_response_time = all_response_times[i];  
+        total_response_time += all_response_times[i];  
+    }  
+
+    double avg_response_time = total_response_time / total_responses;  
+
     // 获取当前时间  
     time_t now = time(NULL);  
     struct tm *t = localtime(&now);  
     char time_str[64];  
     strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", t);  
 
+    // 开始写入HTML文件  
     fprintf(fp, "<!DOCTYPE html>\n"  
                 "<html lang=\"en\">\n"  
                 "<head>\n"  
@@ -129,13 +146,22 @@ void write_html_report(const char* filename, struct ThreadStats* thread_stats,
                 "    .stat-value { color: #2d3748; margin-top: 5px; }\n"  
                 "    .chart { margin-top: 30px; height: 400px; }\n"  
                 "    .timestamp { text-align: right; color: #718096; font-size: 0.9em; margin-top: 20px; }\n"  
+                "    .data-table { width: 100%; border-collapse: collapse; margin: 20px 0; }\n"  
+                "    .data-table th, .data-table td { padding: 12px; text-align: left; border: 1px solid #e5e7eb; }\n"  
+                "    .data-table th { background-color: #f8fafc; font-weight: bold; }\n"  
+                "    .data-table tr:nth-child(even) { background-color: #f8fafc; }\n"  
+                "    .data-table tr:hover { background-color: #f1f5f9; }\n"  
                 "</style>\n"  
                 "</head>\n"  
                 "<body>\n"  
-                "<div class=\"container\">\n"  
-                "    <h1>Server Performance Test Results</h1>\n"  
-                "    <div class=\"timestamp\">Test Time: %s</div>\n"  
-                "    <h2>Test Configuration</h2>\n"  
+                "<div class=\"container\">\n");  
+
+    // 写入标题和时间戳  
+    fprintf(fp, "    <h1>Server Performance Test Results</h1>\n"  
+                "    <div class=\"timestamp\">Test Time: %s</div>\n", time_str);  
+
+    // 写入测试配置  
+    fprintf(fp, "    <h2>Test Configuration</h2>\n"  
                 "    <div class=\"grid\">\n"  
                 "        <div class=\"stat-box\">\n"  
                 "            <div class=\"stat-label\">Number of Threads</div>\n"  
@@ -153,8 +179,10 @@ void write_html_report(const char* filename, struct ThreadStats* thread_stats,
                 "            <div class=\"stat-label\">Server Port</div>\n"  
                 "            <div class=\"stat-value\">%d</div>\n"  
                 "        </div>\n"  
-                "    </div>\n"  
-                "    <h2>Test Results</h2>\n"  
+                "    </div>\n",  
+            NUM_THREADS, REQUESTS_PER_THREAD, SERVER_IP, SERVER_PORT);
+			    // 写入测试结果  
+    fprintf(fp, "    <h2>Test Results</h2>\n"  
                 "    <div class=\"grid\">\n"  
                 "        <div class=\"stat-box\">\n"  
                 "            <div class=\"stat-label\">Total Requests</div>\n"  
@@ -184,8 +212,43 @@ void write_html_report(const char* filename, struct ThreadStats* thread_stats,
                 "            <div class=\"stat-label\">Transfer Rate</div>\n"  
                 "            <div class=\"stat-value\">%.2f MB/s</div>\n"  
                 "        </div>\n"  
-                "    </div>\n"  
-                "    <h2>Response Time Distribution</h2>\n"  
+                "    </div>\n",  
+            total.total_requests,  
+            total.successful_requests,  
+            total_time / 1000.0,  
+            avg_response_time,  
+            (total.successful_requests / (total_time / 1000.0)),  
+            total.total_bytes / (1024.0 * 1024.0),  
+            (total.total_bytes / (1024.0 * 1024.0)) / (total_time / 1000.0));  
+
+    // 写入详细统计表格  
+    fprintf(fp, "    <div class=\"stats-table\">\n"  
+                "        <h2>Detailed Statistics</h2>\n"  
+                "        <table class=\"data-table\">\n"  
+                "            <tr>\n"  
+                "                <th>Metric</th>\n"  
+                "                <th>Value</th>\n"  
+                "            </tr>\n"  
+                "            <tr>\n"  
+                "                <td>Minimum Response Time</td>\n"  
+                "                <td>%.2f ms</td>\n"  
+                "            </tr>\n"  
+                "            <tr>\n"  
+                "                <td>Maximum Response Time</td>\n"  
+                "                <td>%.2f ms</td>\n"  
+                "            </tr>\n"  
+                "            <tr>\n"  
+                "                <td>Average Response Time</td>\n"  
+                "                <td>%.2f ms</td>\n"  
+                "            </tr>\n"  
+                "        </table>\n"  
+                "    </div>\n",  
+            min_response_time,  
+            max_response_time,  
+            avg_response_time);  
+
+    // 写入响应时间分布图  
+    fprintf(fp, "    <h2>Response Time Distribution</h2>\n"  
                 "    <div class=\"chart\" id=\"chart\"></div>\n"  
                 "</div>\n"  
                 "<script>\n"  
@@ -193,7 +256,7 @@ void write_html_report(const char* filename, struct ThreadStats* thread_stats,
                 "    const container = document.getElementById(containerId);\n"  
                 "    const width = container.clientWidth;\n"  
                 "    const height = container.clientHeight;\n"  
-                "    const padding = 50;\n"  
+                "    const padding = 60;\n"  
                 "    \n"  
                 "    // Calculate bins\n"  
                 "    const binCount = 30;\n"  
@@ -227,6 +290,8 @@ void write_html_report(const char* filename, struct ThreadStats* thread_stats,
                 "        rect.setAttribute('width', barWidth - 1);\n"  
                 "        rect.setAttribute('height', barHeight);\n"  
                 "        rect.setAttribute('fill', '#3b82f6');\n"  
+                "        \n"  
+                "        rect.setAttribute('title', `Range: ${(min + i * binWidth).toFixed(2)} - ${(min + (i + 1) * binWidth).toFixed(2)} ms\\nCount: ${count}`);\n"  
                 "        svg.appendChild(rect);\n"  
                 "    });\n"  
                 "    \n"  
@@ -247,12 +312,61 @@ void write_html_report(const char* filename, struct ThreadStats* thread_stats,
                 "    yAxis.setAttribute('stroke', 'black');\n"  
                 "    svg.appendChild(yAxis);\n"  
                 "    \n"  
+                "    // Add X-axis labels\n"  
+                "    const xLabels = 5;\n"  
+                "    for (let i = 0; i <= xLabels; i++) {\n"  
+                "        const x = padding + (width - 2 * padding) * (i / xLabels);\n"  
+                "        const value = min + (max - min) * (i / xLabels);\n"  
+                "        \n"  
+                "        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');\n"  
+                "        label.textContent = value.toFixed(1);\n"  
+                "        label.setAttribute('x', x);\n"  
+                "        label.setAttribute('y', height - padding + 20);\n"  
+                "        label.setAttribute('text-anchor', 'middle');\n"  
+                "        label.setAttribute('font-size', '12px');\n"  
+                "        svg.appendChild(label);\n"  
+                "        \n"  
+                "        const gridLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');\n"  
+                "        gridLine.setAttribute('x1', x);\n"  
+                "        gridLine.setAttribute('y1', padding);\n"  
+                "        gridLine.setAttribute('x2', x);\n"  
+                "        gridLine.setAttribute('y2', height - padding);\n"  
+                "        gridLine.setAttribute('stroke', '#e5e7eb');\n"  
+                "        gridLine.setAttribute('stroke-dasharray', '4');\n"  
+                "        svg.appendChild(gridLine);\n"  
+                "    }\n"  
+                "    \n"  
+                "    // Add Y-axis labels\n"  
+                "    const yLabels = 5;\n"  
+                "    for (let i = 0; i <= yLabels; i++) {\n"  
+                "        const y = height - padding - (height - 2 * padding) * (i / yLabels);\n"  
+                "        const value = maxBinValue * (i / yLabels);\n"  
+                "        \n"  
+                "        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');\n"  
+                "        label.textContent = Math.round(value);\n"  
+                "        label.setAttribute('x', padding - 10);\n"  
+                "        label.setAttribute('y', y + 5);\n"  
+                "        label.setAttribute('text-anchor', 'end');\n"  
+                "        label.setAttribute('font-size', '12px');\n"  
+                "        svg.appendChild(label);\n"  
+                "        \n"  
+                "        const gridLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');\n"  
+                "        gridLine.setAttribute('x1', padding);\n"  
+                "        gridLine.setAttribute('y1', y);\n"  
+                "        gridLine.setAttribute('x2', width - padding);\n"  
+                "        gridLine.setAttribute('y2', y);\n"  
+                "        gridLine.setAttribute('stroke', '#e5e7eb');\n"  
+                "        gridLine.setAttribute('stroke-dasharray', '4');\n"  
+                "        svg.appendChild(gridLine);\n"  
+                "    }\n"  
+                "    \n"  
                 "    // Add labels\n"  
                 "    const xLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');\n"  
                 "    xLabel.textContent = 'Response Time (ms)';\n"  
                 "    xLabel.setAttribute('x', width / 2);\n"  
                 "    xLabel.setAttribute('y', height - 10);\n"  
                 "    xLabel.setAttribute('text-anchor', 'middle');\n"  
+                "    xLabel.setAttribute('font-size', '14px');\n"  
                 "    svg.appendChild(xLabel);\n"  
                 "    \n"  
                 "    const yLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text');\n"  
@@ -261,20 +375,17 @@ void write_html_report(const char* filename, struct ThreadStats* thread_stats,
                 "    yLabel.setAttribute('y', 20);\n"  
                 "    yLabel.setAttribute('transform', 'rotate(-90)');\n"  
                 "    yLabel.setAttribute('text-anchor', 'middle');\n"  
+                "    yLabel.setAttribute('font-size', '14px');\n"  
                 "    svg.appendChild(yLabel);\n"  
+                "    \n"  
+                "    const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');\n"  
+                "    style.textContent = 'rect:hover { fill: #2563eb; }';\n"  
+                "    svg.appendChild(style);\n"  
                 "    \n"  
                 "    container.appendChild(svg);\n"  
                 "}\n"  
                 "\n"  
-                "const responseTimes = [",  
-            time_str,  
-            NUM_THREADS, REQUESTS_PER_THREAD, SERVER_IP, SERVER_PORT,  
-            total.total_requests, total.successful_requests,  
-            total_time / 1000.0,  
-            total.total_time / total.successful_requests,  
-            (total.successful_requests / (total_time / 1000.0)),  
-            total.total_bytes / (1024.0 * 1024.0),  
-            (total.total_bytes / (1024.0 * 1024.0)) / (total_time / 1000.0));  
+                "const responseTimes = [");  
 
     // 写入响应时间数据  
     for (int i = 0; i < total_responses; i++) {  
@@ -285,15 +396,15 @@ void write_html_report(const char* filename, struct ThreadStats* thread_stats,
                 "createHistogram(responseTimes, 'chart');\n"  
                 "</script>\n"  
                 "</body>\n"  
-                "</html>\n");
-	fclose(fp);  
+                "</html>\n");  
+
+    fclose(fp);  
 }  
 
 int main() {  
     pthread_t threads[NUM_THREADS];  
     struct ThreadStats thread_stats[NUM_THREADS] = {0};  
     
-    // 打印开始测试信息  
     printf("Starting performance test...\n");  
     printf("Configuration:\n");  
     printf("- Threads: %d\n", NUM_THREADS);  
@@ -302,7 +413,6 @@ int main() {
     
     double start_time = get_time_ms();  
 
-    // 创建线程  
     for (int i = 0; i < NUM_THREADS; i++) {  
         if (pthread_create(&threads[i], NULL, worker_thread, &thread_stats[i]) != 0) {  
             perror("Failed to create thread");  
@@ -311,7 +421,6 @@ int main() {
         printf("Thread %d started\n", i + 1);  
     }  
 
-    // 等待所有线程完成  
     for (int i = 0; i < NUM_THREADS; i++) {  
         pthread_join(threads[i], NULL);  
         printf("Thread %d completed\n", i + 1);  
@@ -319,13 +428,11 @@ int main() {
 
     double total_time = get_time_ms() - start_time;  
 
-    // 生成带时间戳的文件名  
     time_t now = time(NULL);  
     struct tm *t = localtime(&now);  
     char filename[100];  
     strftime(filename, sizeof(filename), "result-%Y%m%d-%H%M%S.html", t);  
 
-    // 生成HTML报告  
     write_html_report(filename, thread_stats, NUM_THREADS, total_time);  
     
     printf("\nTest completed successfully!\n");  
@@ -334,3 +441,4 @@ int main() {
 
     return 0;  
 }
+			
