@@ -3,19 +3,17 @@
 #include <string.h>  
 #include <unistd.h>  
 #include <sys/socket.h>  
-#include <netinet/in.h>  
-#include <arpa/inet.h>  // 用于 inet_ntoa  
 #include <sys/stat.h>  
 #include <fcntl.h>  
-#include <errno.h>  
 #include <time.h>  
+#include <errno.h>  
+#include <arpa/inet.h>  
+#include "http_handler.h"  
 #include "log.h"  
 
 #define BUFFER_SIZE 1024  
-#define DEFAULT_PORT 8081  
 #define DEFAULT_ROOT "../html"  
 
-// 获取文件大小  
 static off_t get_file_size(const char *filepath) {  
     struct stat st;  
     if (stat(filepath, &st) == 0) {  
@@ -24,7 +22,6 @@ static off_t get_file_size(const char *filepath) {
     return -1;  
 }  
 
-// 获取文件MIME类型  
 const char* get_mime_type(const char *filepath) {  
     const char *ext = strrchr(filepath, '.');  
     if (ext == NULL) {  
@@ -45,7 +42,6 @@ const char* get_mime_type(const char *filepath) {
 
 void handle_client(int client_socket, struct sockaddr_in *client_addr) {  
     char buffer[BUFFER_SIZE];  
-    char response[BUFFER_SIZE];  
     char filepath[BUFFER_SIZE];  
     time_t start_time = time(NULL);  
     
@@ -149,66 +145,4 @@ void handle_client(int client_socket, struct sockaddr_in *client_addr) {
     }  
 
     close(client_socket);  
-}  
-
-int main(int argc, char *argv[]) {  
-    int server_socket, client_socket;  
-    struct sockaddr_in server_addr, client_addr;  
-    socklen_t client_len = sizeof(client_addr);  
-    int port = DEFAULT_PORT;  
-
-    // 初始化日志系统  
-    init_logging();  
-    write_log("=== Server starting up ===");  
-
-    if (argc > 1) {  
-        port = atoi(argv[1]);  
-        write_log("Custom port specified: %d", port);  
-    }  
-
-    server_socket = socket(AF_INET, SOCK_STREAM, 0);  
-    if (server_socket == -1) {  
-        write_log("Socket creation failed: %s", strerror(errno));  
-        exit(EXIT_FAILURE);  
-    }  
-
-    int opt = 1;  
-    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) == -1) {  
-        write_log("Setsockopt failed: %s", strerror(errno));  
-        exit(EXIT_FAILURE);  
-    }  
-
-    server_addr.sin_family = AF_INET;  
-    server_addr.sin_addr.s_addr = INADDR_ANY;  
-    server_addr.sin_port = htons(port);  
-
-    if (bind(server_socket, (struct sockaddr *)&server_addr, sizeof(server_addr)) == -1) {  
-        write_log("Bind failed: %s", strerror(errno));  
-        exit(EXIT_FAILURE);  
-    }  
-
-    if (listen(server_socket, 10) == -1) {  
-        write_log("Listen failed: %s", strerror(errno));  
-        exit(EXIT_FAILURE);  
-    }  
-
-    write_log("Server successfully started on port %d", port);  
-    write_log("Document root: %s", DEFAULT_ROOT);  
-    write_log("Maximum connections in queue: 10");  
-    printf("Server started on port %d...\n", port);  
-
-    while (1) {  
-        client_socket = accept(server_socket, (struct sockaddr *)&client_addr, &client_len);  
-        if (client_socket == -1) {  
-            write_log("Accept failed: %s", strerror(errno));  
-            continue;  
-        }  
-
-        handle_client(client_socket, &client_addr);  
-    }  
-
-    write_log("=== Server shutting down ===");  
-    close_log();  
-    close(server_socket);  
-    return 0;  
 }
