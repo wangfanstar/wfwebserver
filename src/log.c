@@ -7,25 +7,27 @@
 #include <stdarg.h>  
 #include <unistd.h>  
 
-#define LOG_DIR "../log"  
+#define LOG_DIR "../logs"  
 #define MAX_LOG_FILES 10  
 #define MAX_LOG_SIZE (100 * 1024 * 1024)  // 100MB  
 #define MAX_TOTAL_SIZE (1024 * 1024 * 1024)  // 1GB  
 
-// 日志文件句柄  
 static FILE* current_log = NULL;  
 static int current_log_number = 1;  
 
-// 获取当前日志文件大小  
 static long get_file_size(FILE* file) {  
+    if (!file) return 0;  
+    
     long current_pos = ftell(file);  
-    fseek(file, 0, SEEK_END);  
+    if (current_pos == -1) return 0;  
+    
+    if (fseek(file, 0, SEEK_END) != 0) return 0;  
     long size = ftell(file);  
-    fseek(file, current_pos, SEEK_SET);  
+    if (fseek(file, current_pos, SEEK_SET) != 0) return 0;  
+    
     return size;  
 }  
 
-// 获取所有日志文件的总大小  
 static long get_total_log_size() {  
     struct stat st;  
     char log_path[256];  
@@ -40,10 +42,10 @@ static long get_total_log_size() {
     return total_size;  
 }  
 
-// 轮转日志文件  
 static void rotate_log() {  
     if (current_log) {  
         fclose(current_log);  
+        current_log = NULL;  
     }  
     
     current_log_number = (current_log_number % MAX_LOG_FILES) + 1;  
@@ -51,50 +53,33 @@ static void rotate_log() {
     // 如果总大小超过限制，删除最旧的日志  
     while (get_total_log_size() > MAX_TOTAL_SIZE) {  
         char oldest_log[256];  
-        snprintf(oldest_log, sizeof(oldest_log), "%s/server_%d.log", LOG_DIR,   
+        snprintf(oldest_log, sizeof(oldest_log), "%s/server_%d.log", LOG_DIR,  
                 ((current_log_number - 2 + MAX_LOG_FILES) % MAX_LOG_FILES) + 1);  
         remove(oldest_log);  
     }  
     
     char new_log_path[256];  
     snprintf(new_log_path, sizeof(new_log_path), "%s/server_%d.log", LOG_DIR, current_log_number);  
-    current_log = fopen(new_log_path, "w");  
+    current_log = fopen(new_log_path, "a");  // 使用追加模式而不是覆盖模式  
     if (!current_log) {  
-        perror("Failed to create new log file");  
-        exit(EXIT_FAILURE);  
+        fprintf(stderr, "Failed to create new log file %s: %s\n",   
+                new_log_path, strerror(errno));  
+        return;  
     }  
 }  
 
-void init_logging() {  
-    // 创建日志目录  
-    mkdir(LOG_DIR, 0755);  
-    
-    // 查找当前最新的日志文件  
-    struct stat st;  
-    char log_path[256];  
-    for (int i = 1; i <= MAX_LOG_FILES; i++) {  
-        snprintf(log_path, sizeof(log_path), "%s/server_%d.log", LOG_DIR, i);  
-        if (stat(log_path, &st) == -1) {  
-            current_log_number = i;  
-            break;  
-        }  
-    }  
-    
-    // 打开当前日志文件  
-    snprintf(log_path, sizeof(log_path), "%s/server_%d.log", LOG_DIR, current_log_number);  
-    current_log = fopen(log_path, "a");  
-    if (!current_log) {  
-        perror("Failed to open log file");  
-        exit(EXIT_FAILURE);  
-    }  
-}  
+ 
 
 void write_log(const char* format, ...) {  
-    if (!current_log) return;  
+    if (!current_log) {  
+        fprintf(stderr, "Logging system not initialized\n");  
+        return;  
+    }  
     
     // 检查日志大小  
     if (get_file_size(current_log) > MAX_LOG_SIZE) {  
         rotate_log();  
+        if (!current_log) return;  // 如果轮转失败，退出  
     }  
     
     // 获取当前时间  
@@ -119,7 +104,43 @@ void write_log(const char* format, ...) {
 
 void close_log() {  
     if (current_log) {  
+        write_log("Logging system shutdown");  
         fclose(current_log);  
         current_log = NULL;  
     }  
 }
+
+int init_logging() {  
+    // 创建日志目录  
+    if (mkdir(LOG_DIR, 0755) != 0 && errno != EEXIST) {  
+        fprintf(stderr, "Failed to create log directory %s: %s\n",   
+                LOG_DIR, strerror(errno));  
+        return -1;  
+    }  
+    
+    // 查找当前最新的日志文件  
+    struct stat st;  
+    char log_path[256];  
+    current_log_number = 1;  
+    
+    for (int i = 1; i <= MAX_LOG_FILES; i++) {  
+        snprintf(log_path, sizeof(log_path), "%s/server_%d.log", LOG_DIR, i);  
+        if (stat(log_path, &st) == -1) {  
+            current_log_number = i;  
+            break;  
+        }  
+    }  
+    
+    // 打开当前日志文件  
+    snprintf(log_path, sizeof(log_path), "%s/server_%d.log", LOG_DIR, current_log_number);  
+    current_log = fopen(log_path, "a");  
+    if (!current_log) {  
+        fprintf(stderr, "Failed to open log file %s: %s\n",   
+                log_path, strerror(errno));  
+        return -1;  
+    }  
+    
+    // 写入启动日志  
+    write_log("Logging system initialized");  
+    return 0;  
+} 
