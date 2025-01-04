@@ -129,17 +129,24 @@
 
         <div class="grid">  
             <div class="card">  
-                <h2 class="card-title">本地文件系统</h2>  
-                <p class="card-content">访问本地的快速复制工具，无需网络连接即可使用。</p>  
-                <a href="fastcopy.html" class="button">访问系统</a>  
-                <div class="status online">本地可用</div>  
+                <h2 class="card-title">常用代码分支信息复制查询</h2>  
+                <p class="card-content">可快速复制常用代码路径信息</p>  
+                <a href="fastcopy.html" class="button">http://10.114.209.41:8081/</a>  
+                <div class="status online">本地网页</div>  
             </div>  
 
             <div class="card">  
-                <h2 class="card-title">远程系统</h2>  
-                <p class="card-content">访问远程服务器上的系统，需要确保网络连接正常。</p>  
-                <a href="http://10.114.209.41:8181" class="button" id="remoteButton">访问系统</a>  
+                <h2 class="card-title">CR SR 知识分享</h2>  
+                <p class="card-content">核心高端路由器知识分享FAQ网址</p>  
+                <a href="http://10.114.209.41:8181" class="button" id="remoteButton">http://10.114.209.41:8181/</a>  
                 <div class="status" id="remoteStatus">检查中...</div>  
+            </div>
+
+            <div class="card">  
+                <h2 class="card-title">时钟芯片配置转换</h2>  
+                <p class="card-content">IDT AU时钟芯片寄存器配置格式转换工具</p>  
+                <a href="http://10.114.209.41:8081/idtclkreg.html" class="button" id="clockButton">http://10.114.209.41:8181/idtclkreg.html</a>  
+                <div class="status" id="clockStatus">检查中...</div>  
             </div>  
         </div>  
     </div>  
@@ -147,25 +154,40 @@
     <script>  
         // 检查远程系统是否可访问  
         function checkRemoteStatus() {  
-            const statusElement = document.getElementById('remoteStatus');  
-            const button = document.getElementById('remoteButton');  
-            
-            fetch('http://10.114.209.41:8181', {  
-                mode: 'no-cors',  
-                method: 'HEAD'  
-            })  
-            .then(() => {  
-                statusElement.className = 'status online';  
-                statusElement.textContent = '远程可用';  
-                button.style.opacity = '1';  
-                button.style.pointerEvents = 'auto';  
-            })  
-            .catch(() => {  
-                statusElement.className = 'status offline';  
-                statusElement.textContent = '远程不可用';  
-                button.style.opacity = '0.5';  
-                button.style.pointerEvents = 'none';  
-            });  
+            const endpoints = [
+                {
+                    url: 'http://10.114.209.41:8181',
+                    buttonId: 'remoteButton',
+                    statusId: 'remoteStatus'
+                },
+                {
+                    url: 'http://10.114.209.41:8181/idtclkreg.html',
+                    buttonId: 'clockButton',
+                    statusId: 'clockStatus'
+                }
+            ];
+
+            endpoints.forEach(endpoint => {
+                const statusElement = document.getElementById(endpoint.statusId);
+                const button = document.getElementById(endpoint.buttonId);
+                
+                fetch(endpoint.url, {  
+                    mode: 'no-cors',  
+                    method: 'HEAD'  
+                })  
+                .then(() => {  
+                    statusElement.className = 'status online';  
+                    statusElement.textContent = '远程可用';  
+                    button.style.opacity = '1';  
+                    button.style.pointerEvents = 'auto';  
+                })  
+                .catch(() => {  
+                    statusElement.className = 'status offline';  
+                    statusElement.textContent = '远程不可用';  
+                    button.style.opacity = '0.5';  
+                    button.style.pointerEvents = 'none';  
+                });
+            });
         }  
 
         // 页面加载完成后检查远程状态  
