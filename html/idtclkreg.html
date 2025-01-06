@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <title>IDT34001 时钟芯片配置转换工具</title>
     <style>
-        /* Previous styles remain the same until .container */
         * {
             margin: 0;
             padding: 0;
@@ -17,14 +16,19 @@
             color: #333;  
             line-height: 1.5;  
             padding: 1.5rem;  
+            min-height: 100vh;
+            height: 100vh;
+            overflow: hidden;
         }  
 
         .container {  
-            max-width: 1440px; /* Increased from 1200px to 1440px (20% increase) */  
+            max-width: 1440px;
             margin: 0 auto;  
             display: flex;  
             flex-direction: column;  
-            height: calc(100vh - 3rem);  
+            height: calc(100vh - 3rem);
+            max-height: calc(100vh - 3rem);
+            overflow: hidden;
         }  
 
         .header {
@@ -32,12 +36,15 @@
             justify-content: space-between;
             align-items: center;
             margin-bottom: 1.5rem;
+            flex-shrink: 0;
         }
 
         .main-content-wrapper {
             display: flex;
             flex: 1;
             gap: 1.5rem;
+            min-height: 0; /* 重要：允许内容收缩 */
+            overflow: hidden;
         }
 
         .side-nav {
@@ -45,6 +52,7 @@
             display: flex;
             flex-direction: column;
             gap: 0.5rem;
+            flex-shrink: 0;
         }
 
         .nav-button {
@@ -76,9 +84,10 @@
             flex: 1;
             display: flex;
             flex-direction: column;
+            min-height: 0; /* 重要：允许内容收缩 */
+            overflow: hidden;
         }
 
-        /* Rest of the previous styles */
         h1 {
             font-size: 1.5rem;
             font-weight: bold;
@@ -114,6 +123,7 @@
             align-items: center;
             gap: 1rem;
             margin-bottom: 1rem;
+            flex-shrink: 0;
         }
 
         .checkbox-wrapper {
@@ -160,10 +170,21 @@
             background-color: #047857;
         }
 
+        .btn-secondary {
+            background-color: #6b7280;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background-color: #4b5563;
+        }
+
         .editor-container {
             display: flex;
             gap: 1.5rem;
             flex: 1;
+            min-height: 0; /* 重要：允许内容收缩 */
+            overflow: hidden;
         }
 
         .editor-panel {
@@ -173,6 +194,7 @@
             box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
             overflow: hidden;
             display: flex;
+            min-height: 0; /* 重要：允许内容收缩 */
         }
 
         .line-numbers {
@@ -186,6 +208,7 @@
             text-align: right;
             min-width: 3.5rem;
             overflow: hidden;
+            flex-shrink: 0;
         }
 
         .line-numbers.hidden {
@@ -196,6 +219,7 @@
             flex: 1;
             display: flex;
             overflow: hidden;
+            min-height: 0; /* 重要：允许内容收缩 */
         }
 
         .main-content {
@@ -216,7 +240,6 @@
             background: transparent;
         }
 
-        /* 滚动条样式 */
         ::-webkit-scrollbar {
             width: 8px;
             height: 8px;
@@ -236,18 +259,18 @@
             background: #666;
         }
 
-        /* Toast 提示 */
         .toast {
             position: fixed;
             top: 1rem;
             right: 1rem;
             background-color: #1f2937;
             color: white;
-            padding: 0.5rem 1rem;
+            padding: 0.75rem 1.5rem;
             border-radius: 0.375rem;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
             animation: fadeInOut 2s ease-in-out;
             z-index: 1000;
+            font-size: 0.875rem;
         }
 
         @keyframes fadeInOut {
@@ -284,6 +307,7 @@
                         <label for="showLineNumbers">显示行号</label>
                     </div>
                     <div class="button-group">
+                        <button onclick="clearInput()" class="btn-secondary">清空输入</button>
                         <button onclick="convertInput()" class="btn-primary">转换</button>
                         <button onclick="copyOutput()" class="btn-success">复制输出</button>
                     </div>
@@ -313,11 +337,29 @@
     </div>
 
     <script>
-        // Previous JavaScript remains exactly the same
         document.addEventListener('DOMContentLoaded', function() {
             updateInputLineNumbers();
             document.getElementById('showLineNumbers').addEventListener('change', toggleLineNumbers);
+            
+            // 设置初始高度
+            adjustEditorHeight();
+            // 监听窗口大小变化
+            window.addEventListener('resize', adjustEditorHeight);
         });
+
+        // 调整编辑器高度
+        function adjustEditorHeight() {
+            const container = document.querySelector('.container');
+            const header = document.querySelector('.header');
+            const controls = document.querySelector('.controls');
+            
+            // 计算可用高度
+            const availableHeight = container.clientHeight - header.offsetHeight - controls.offsetHeight - 40; // 40px for margins
+            
+            // 设置编辑器容器高度
+            const editorContainer = document.querySelector('.editor-container');
+            editorContainer.style.height = `${availableHeight}px`;
+        }
 
         function convertInput() {
             const input = document.getElementById('input').value;
@@ -350,14 +392,61 @@
             updateOutputLineNumbers();
         }
 
-        function copyOutput() {
+        async function copyOutput() {
             const outputElement = document.getElementById('output');
-            navigator.clipboard.writeText(outputElement.textContent).then(() => {
+            const textToCopy = outputElement.textContent;
+            
+            if (!textToCopy || textToCopy.trim() === '') {
+                showToast('没有可复制的内容');
+                return;
+            }
+
+            try {
+                await navigator.clipboard.writeText(textToCopy);
                 showToast('已复制到剪贴板');
-            }).catch(err => {
+            } catch (err) {
                 console.error('复制失败:', err);
-                showToast('复制失败，请手动复制');
-            });
+                
+                // 降级方案：使用传统的选择+复制方法
+                try {
+                    const range = document.createRange();
+                    range.selectNode(outputElement);
+                    window.getSelection().removeAllRanges();
+                    window.getSelection().addRange(range);
+                    
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                        showToast('已复制到剪贴板');
+                    } else {
+                        showToast('复制失败，请手动复制 (Ctrl+C)');
+                    }
+                    
+                    window.getSelection().removeAllRanges();
+                } catch (fallbackErr) {
+                    console.error('降级复制方案也失败:', fallbackErr);
+                    showToast('复制失败，请手动复制 (Ctrl+C)');
+                }
+            }
+        }
+
+        function clearInput() {
+            const inputElement = document.getElementById('input');
+            const outputElement = document.getElementById('output');
+            
+            if (!inputElement.value.trim()) {
+                showToast('输入已经是空的了');
+                return;
+            }
+
+            // 清空输入和输出
+            inputElement.value = '';
+            outputElement.textContent = '';
+            
+            // 更新行号
+            updateInputLineNumbers();
+            updateOutputLineNumbers();
+            
+            showToast('已清空输入和输出');
         }
 
         function showToast(message) {
@@ -371,9 +460,9 @@
             toast.className = 'toast';
             document.body.appendChild(toast);
             
-            setTimeout(() => {
-                toast.remove();
-            }, 2000);
+            // 确保toast会被移除
+            const removeToast = () => toast && toast.parentElement && toast.remove();
+            setTimeout(removeToast, 2000);
         }
 
         function toggleLineNumbers() {
