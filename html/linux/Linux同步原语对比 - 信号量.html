@@ -1,0 +1,1063 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux同步原语对比 - 信号量</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+        }
+        .content {
+            margin-left: 250px;
+            padding: 20px;
+            width: calc(100% - 250px);
+        }
+        .sidebar-header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #34495e;
+        }
+        .nav-link {
+            display: block;
+            padding: 15px 20px;
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        .nav-link:hover {
+            background-color: #34495e;
+        }
+        .active {
+            background-color: #3498db;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .card-header {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+        }
+        .card-body {
+            padding: 20px;
+        }
+        .note-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre;
+            overflow-x: auto;
+            line-height: 1.5;
+            margin: 15px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2 class="text-xl font-bold">Linux同步原语对比</h2>
+        </div>
+        <nav>
+            <a href="index.html" class="nav-link">首页</a>
+            <a href="mutex.html" class="nav-link">互斥锁 (Mutex)</a>
+            <a href="rwlock.html" class="nav-link">读写锁 (RWLock)</a>
+            <a href="spinlock.html" class="nav-link">自旋锁 (Spinlock)</a>
+            <a href="atomic.html" class="nav-link">原子操作 (Atomic)</a>
+            <a href="semaphore.html" class="nav-link active">信号量 (Semaphore)</a>
+            <a href="rcu.html" class="nav-link">RCU</a>
+            <a href="seqlock.html" class="nav-link">顺序锁 (Seqlock)</a>
+            <a href="barrier.html" class="nav-link">内存屏障 (Barrier)</a>
+            <a href="rwbarrier.html" class="nav-link">读写屏障 (RW Barrier)</a>
+        </nav>
+    </div>
+
+    <div class="content">
+        <h1 class="text-3xl font-bold mb-6">信号量 (Semaphore)</h1>
+        
+        <div class="card">
+            <div class="card-header">信号量概述</div>
+            <div class="card-body">
+                <p class="mb-4">信号量是一种计数型同步原语，维护一个正整数计数值，可用于控制对资源的访问或者同步多个线程。与互斥锁不同，信号量允许多个线程同时访问受限资源（直到达到指定的上限）。</p>
+                
+                <p class="mb-4">信号量的主要特点是：</p>
+                <ul class="list-disc ml-8 mb-4">
+                    <li>支持多个线程/进程同时获取（与互斥锁相比更具灵活性）</li>
+                    <li>常用于两类问题：互斥控制和调度同步</li>
+                    <li>可以实现资源计数和线程协作</li>
+                    <li>当信号量值为0时，尝试获取信号量的线程将被阻塞</li>
+                    <li>二值信号量（值只有0和1两种可能）是互斥锁的一种特例</li>
+                </ul>
+                
+                <div class="note-box">
+                    <h3 class="font-bold text-lg mb-2">Dog250风格总结</h3>
+                    <p>信号量是操作系统理论中最经典的同步原语之一，由大师Dijkstra在1965年首次提出。它的精髓在于"计数+等待队列"的二元组结构，既能实现互斥访问（二值信号量），也能实现资源管理（计数信号量）。在Linux内核中，信号量是调度级同步手段，意味着获取不到信号量的线程会真正睡眠，让出处理器，而不是像自旋锁那样忙等待。这个特性使它特别适合保护可能长时间持有的资源，或者需要在临界区内执行IO操作的场景。信号量的实现哲学是"悲观并发控制"，即假设冲突经常发生并提前阻塞。值得一提的是，信号量具有"可递归获取"的特性，这与互斥锁的"自旋-休眠"两阶段策略形成了鲜明对比。在实际应用中，内核开发者经常将信号量用作"门闩"，控制对关键资源的访问流量。不要小看这个简单的计数器，它蕴含了并发控制的深刻智慧，是理解操作系统同步机制的基础之石。信号量的睡眠特性意味着它不适合中断上下文，所以在选择同步原语时必须考虑执行环境的约束。掌握了信号量，你就掌握了并发编程中的一把瑞士军刀，灵活而强大。</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">用户态与内核态信号量对比</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-center">用户态信号量</h3>
+                        <p class="mb-4">用户空间有多种信号量实现，主要包括：</p>
+                        <ul class="list-disc ml-8 mb-4">
+                            <li>POSIX信号量（<code>&lt;semaphore.h&gt;</code>）</li>
+                            <li>System V信号量（<code>&lt;sys/sem.h&gt;</code>）</li>
+                            <li>C11标准信号量（<code>&lt;threads.h&gt;</code>）</li>
+                        </ul>
+                        
+                        <h4 class="text-lg font-bold mb-2">POSIX信号量</h4>
+                        <table class="mb-6">
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;semaphore.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>sem_t</code></td>
+                            </tr>
+                            <tr>
+                                <th>创建/初始化</th>
+                                <td>
+                                    <code>sem_init(&sem, 0, initial_value);</code> - 初始化无名信号量<br>
+                                    <code>sem = sem_open("name", O_CREAT, 0644, initial_value);</code> - 有名信号量
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>获取/等待</th>
+                                <td>
+                                    <code>sem_wait(&sem);</code> - 阻塞等待<br>
+                                    <code>sem_trywait(&sem);</code> - 非阻塞尝试<br>
+                                    <code>sem_timedwait(&sem, &timeout);</code> - 超时等待
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>释放/增加</th>
+                                <td><code>sem_post(&sem);</code></td>
+                            </tr>
+                            <tr>
+                                <th>获取值</th>
+                                <td><code>sem_getvalue(&sem, &val);</code></td>
+                            </tr>
+                            <tr>
+                                <th>销毁/关闭</th>
+                                <td>
+                                    <code>sem_destroy(&sem);</code> - 无名信号量<br>
+                                    <code>sem_close(sem);</code> - 有名信号量<br>
+                                    <code>sem_unlink("name");</code> - 删除有名信号量
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <h4 class="text-lg font-bold mb-2">System V信号量</h4>
+                        <table class="mb-6">
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;sys/sem.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td>整数标识符（semid）</td>
+                            </tr>
+                            <tr>
+                                <th>创建/获取</th>
+                                <td>
+                                    <code>semid = semget(key, nsems, flags);</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>初始化</th>
+                                <td>
+                                    <code>semctl(semid, semnum, SETVAL, value);</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>操作</th>
+                                <td>
+                                    <code>semop(semid, &sembuf, nsops);</code> - 执行操作<br>
+                                    <code>semtimedop(semid, &sembuf, nsops, &timeout);</code> - 超时操作
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>控制</th>
+                                <td>
+                                    <code>semctl(semid, semnum, cmd, ...);</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>销毁</th>
+                                <td>
+                                    <code>semctl(semid, 0, IPC_RMID);</code>
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <h4 class="text-lg font-bold mb-2">C11标准信号量</h4>
+                        <table>
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;threads.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>mtx_t</code> 和条件变量 <code>cnd_t</code> 组合使用</td>
+                            </tr>
+                            <tr>
+                                <th>注意</th>
+                                <td>C11标准没有直接提供信号量类型，通常使用互斥锁和条件变量模拟</td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-center">内核态信号量</h3>
+                        <p class="mb-4">Linux内核提供了多种信号量API：</p>
+                        <ul class="list-disc ml-8 mb-4">
+                            <li>传统信号量（<code>struct semaphore</code>）</li>
+                            <li>读写信号量（<code>struct rw_semaphore</code>）</li>
+                            <li>完成量（<code>struct completion</code>）- 特殊的二值信号量</li>
+                        </ul>
+                        
+                        <h4 class="text-lg font-bold mb-2">传统信号量</h4>
+                        <table class="mb-6">
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;linux/semaphore.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>struct semaphore</code></td>
+                            </tr>
+                            <tr>
+                                <th>初始化</th>
+                                <td>
+                                    <code>sema_init(&sem, count);</code><br>
+                                    <code>DEFINE_SEMAPHORE(sem);</code> - 定义并初始化为1
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>获取/等待</th>
+                                <td>
+                                    <code>down(&sem);</code> - 获取信号量（可中断睡眠）<br>
+                                    <code>down_interruptible(&sem);</code> - 可中断获取<br>
+                                    <code>down_killable(&sem);</code> - 仅致命信号可中断<br>
+                                    <code>down_trylock(&sem);</code> - 非阻塞获取<br>
+                                    <code>down_timeout(&sem, timeout);</code> - 超时获取
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>释放</th>
+                                <td>
+                                    <code>up(&sem);</code> - 释放信号量
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <h4 class="text-lg font-bold mb-2">读写信号量</h4>
+                        <table class="mb-6">
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;linux/rwsem.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>struct rw_semaphore</code></td>
+                            </tr>
+                            <tr>
+                                <th>初始化</th>
+                                <td>
+                                    <code>init_rwsem(&rwsem);</code><br>
+                                    <code>DECLARE_RWSEM(name);</code> - 声明并初始化
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>读取锁定</th>
+                                <td>
+                                    <code>down_read(&rwsem);</code> - 获取读锁<br>
+                                    <code>down_read_trylock(&rwsem);</code> - 非阻塞获取读锁
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>写入锁定</th>
+                                <td>
+                                    <code>down_write(&rwsem);</code> - 获取写锁<br>
+                                    <code>down_write_trylock(&rwsem);</code> - 非阻塞获取写锁
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>锁释放</th>
+                                <td>
+                                    <code>up_read(&rwsem);</code> - 释放读锁<br>
+                                    <code>up_write(&rwsem);</code> - 释放写锁
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>锁转换</th>
+                                <td>
+                                    <code>downgrade_write(&rwsem);</code> - 写锁降级为读锁
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <h4 class="text-lg font-bold mb-2">完成量</h4>
+                        <table>
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;linux/completion.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>struct completion</code></td>
+                            </tr>
+                            <tr>
+                                <th>初始化</th>
+                                <td>
+                                    <code>init_completion(&comp);</code><br>
+                                    <code>DECLARE_COMPLETION(comp);</code> - 声明并初始化
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>等待</th>
+                                <td>
+                                    <code>wait_for_completion(&comp);</code> - 不可中断等待<br>
+                                    <code>wait_for_completion_interruptible(&comp);</code> - 可中断等待<br>
+                                    <code>wait_for_completion_timeout(&comp, timeout);</code> - 超时等待<br>
+                                    <code>wait_for_completion_killable(&comp);</code> - 仅致命信号可中断
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>通知完成</th>
+                                <td>
+                                    <code>complete(&comp);</code> - 完成一次，唤醒一个等待者<br>
+                                    <code>complete_all(&comp);</code> - 完成并唤醒所有等待者
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>重新初始化</th>
+                                <td>
+                                    <code>reinit_completion(&comp);</code> - 重置完成状态
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">使用示例</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">用户态信号量示例</h3>
+                        <h4 class="text-lg mb-2">POSIX无名信号量</h4>
+                        <div class="code-block">
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <semaphore.h>
+#include <unistd.h>
+
+#define THREAD_NUM 4
+#define BUFFER_SIZE 10
+
+// 共享数据和同步原语
+int buffer[BUFFER_SIZE];
+int fill = 0, use = 0;
+sem_t empty;    // 空槽位计数
+sem_t full;     // 满槽位计数
+sem_t mutex;    // 互斥访问
+
+// 生产者线程函数
+void* producer(void* arg) {
+    int id = *(int*)arg;
+    int item = 0;
+    
+    while (1) {
+        // 生产项目
+        item = rand() % 100;
+        
+        // 等待空槽位
+        sem_wait(&empty);
+        // 获取互斥锁
+        sem_wait(&mutex);
+        
+        // 临界区：放入数据
+        buffer[fill] = item;
+        fill = (fill + 1) % BUFFER_SIZE;
+        printf("Producer %d: Produced item %d\n", id, item);
+        
+        // 释放互斥锁
+        sem_post(&mutex);
+        // 增加满槽位计数
+        sem_post(&full);
+        
+        // 模拟生产耗时
+        usleep(rand() % 1000000);
+    }
+    
+    return NULL;
+}
+
+// 消费者线程函数
+void* consumer(void* arg) {
+    int id = *(int*)arg;
+    int item;
+    
+    while (1) {
+        // 等待满槽位
+        sem_wait(&full);
+        // 获取互斥锁
+        sem_wait(&mutex);
+        
+        // 临界区：取出数据
+        item = buffer[use];
+        use = (use + 1) % BUFFER_SIZE;
+        printf("Consumer %d: Consumed item %d\n", id, item);
+        
+        // 释放互斥锁
+        sem_post(&mutex);
+        // 增加空槽位计数
+        sem_post(&empty);
+        
+        // 模拟消费耗时
+        usleep(rand() % 1500000);
+    }
+    
+    return NULL;
+}
+
+int main() {
+    pthread_t prod_threads[THREAD_NUM], cons_threads[THREAD_NUM];
+    int thread_ids[THREAD_NUM];
+    
+    // 初始化随机数生成器
+    srand(time(NULL));
+    
+    // 初始化信号量
+    sem_init(&empty, 0, BUFFER_SIZE);  // 初始有BUFFER_SIZE个空槽
+    sem_init(&full, 0, 0);             // 初始有0个满槽
+    sem_init(&mutex, 0, 1);            // 二值信号量用作互斥锁
+    
+    // 创建生产者线程
+    for (int i = 0; i < THREAD_NUM; i++) {
+        thread_ids[i] = i;
+        pthread_create(&prod_threads[i], NULL, producer, &thread_ids[i]);
+    }
+    
+    // 创建消费者线程
+    for (int i = 0; i < THREAD_NUM; i++) {
+        thread_ids[i] = i;
+        pthread_create(&cons_threads[i], NULL, consumer, &thread_ids[i]);
+    }
+    
+    // 主线程等待一段时间后终止程序
+    sleep(10);
+    printf("Producer-Consumer demonstration completed.\n");
+    
+    // 销毁信号量
+    sem_destroy(&empty);
+    sem_destroy(&full);
+    sem_destroy(&mutex);
+    
+    return 0;
+}
+</div>
+
+                        <h4 class="text-lg mt-4 mb-2">POSIX有名信号量（多进程共享）</h4>
+                        <div class="code-block">
+// producer.c - 使用有名信号量的生产者程序
+#include <stdio.h>
+#include <stdlib.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <semaphore.h>
+#include <unistd.h>
+#include <sys/stat.h>
+#include <string.h>
+
+// 共享内存对象名
+#define SHM_NAME "/buffer_shm"
+#define BUFFER_SIZE 10
+
+// 信号量名称
+#define SEM_MUTEX "/mutex_sem"
+#define SEM_EMPTY "/empty_sem"
+#define SEM_FULL "/full_sem"
+
+// 共享数据结构
+typedef struct {
+    int buffer[BUFFER_SIZE];
+    int fill;
+    int use;
+} shared_data_t;
+
+int main() {
+    // 创建/打开共享内存
+    int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    if (shm_fd == -1) {
+        perror("shm_open failed");
+        exit(1);
+    }
+    
+    // 设置共享内存大小
+    ftruncate(shm_fd, sizeof(shared_data_t));
+    
+    // 映射共享内存
+    shared_data_t *shared_data = (shared_data_t*)mmap(NULL, sizeof(shared_data_t), 
+                                                    PROT_READ | PROT_WRITE, 
+                                                    MAP_SHARED, shm_fd, 0);
+    if (shared_data == MAP_FAILED) {
+        perror("mmap failed");
+        exit(1);
+    }
+    
+    // 初始化共享数据
+    shared_data->fill = 0;
+    shared_data->use = 0;
+    memset(shared_data->buffer, 0, sizeof(int) * BUFFER_SIZE);
+    
+    // 创建/打开信号量
+    sem_t *mutex_sem = sem_open(SEM_MUTEX, O_CREAT, 0666, 1);
+    sem_t *empty_sem = sem_open(SEM_EMPTY, O_CREAT, 0666, BUFFER_SIZE);
+    sem_t *full_sem = sem_open(SEM_FULL, O_CREAT, 0666, 0);
+    
+    if (mutex_sem == SEM_FAILED || empty_sem == SEM_FAILED || full_sem == SEM_FAILED) {
+        perror("sem_open failed");
+        exit(1);
+    }
+    
+    printf("Producer started. Press Ctrl+C to exit.\n");
+    
+    // 生产数据
+    while (1) {
+        // 生成随机数据
+        int item = rand() % 100;
+        
+        // 等待空槽
+        sem_wait(empty_sem);
+        // 获取互斥锁
+        sem_wait(mutex_sem);
+        
+        // 放入数据
+        shared_data->buffer[shared_data->fill] = item;
+        shared_data->fill = (shared_data->fill + 1) % BUFFER_SIZE;
+        printf("Produced: %d\n", item);
+        
+        // 释放互斥锁
+        sem_post(mutex_sem);
+        // 增加满槽计数
+        sem_post(full_sem);
+        
+        // 模拟生产时间
+        sleep(rand() % 3);
+    }
+    
+    // 清理资源 (在实际使用中需要添加信号处理)
+    sem_close(mutex_sem);
+    sem_close(empty_sem);
+    sem_close(full_sem);
+    munmap(shared_data, sizeof(shared_data_t));
+    close(shm_fd);
+    
+    return 0;
+}
+
+// consumer.c - 对应的消费者程序
+// 同样使用上述信号量和共享内存, 实现略 (实际应用中需要完整实现)
+</div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">内核态信号量示例</h3>
+                        <h4 class="text-lg mb-2">传统信号量</h4>
+                        <div class="code-block">
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/semaphore.h>
+#include <linux/kthread.h>
+#include <linux/delay.h>
+#include <linux/sched.h>
+#include <linux/slab.h>
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Example");
+MODULE_DESCRIPTION("Semaphore Example");
+
+// 资源池结构
+#define POOL_SIZE 5
+
+struct resource_pool {
+    int resources[POOL_SIZE];
+    int count;
+    struct semaphore sem;       // 计数信号量
+    struct semaphore mutex;     // 二值信号量（互斥）
+};
+
+static struct resource_pool *pool;
+
+// 工作线程和同步用的完成量
+static struct task_struct *producer_thread;
+static struct task_struct *consumer_threads[3];
+static struct completion example_complete;
+
+// 生产者线程函数
+static int producer_function(void *data)
+{
+    int i = 0;
+    
+    pr_info("Semaphore Example: Producer thread started\n");
+    
+    while (!kthread_should_stop()) {
+        // 等待有空间
+        if (down_interruptible(&pool->sem)) {
+            break;  // 被中断
+        }
+        
+        // 获取互斥锁
+        if (down_interruptible(&pool->mutex)) {
+            up(&pool->sem);
+            break;  // 被中断
+        }
+        
+        // 临界区：添加资源
+        if (pool->count < POOL_SIZE) {
+            pool->resources[pool->count++] = i++;
+            pr_info("Semaphore Example: Produced resource %d, count = %d\n", 
+                    i-1, pool->count);
+        }
+        
+        // 释放互斥锁
+        up(&pool->mutex);
+        
+        // 模拟生产时间
+        msleep_interruptible(1000);
+    }
+    
+    pr_info("Semaphore Example: Producer thread exiting\n");
+    return 0;
+}
+
+// 消费者线程函数
+static int consumer_function(void *data)
+{
+    int id = *(int*)data;
+    int resource;
+    
+    pr_info("Semaphore Example: Consumer %d thread started\n", id);
+    
+    while (!kthread_should_stop()) {
+        // 获取互斥锁
+        if (down_interruptible(&pool->mutex)) {
+            break;  // 被中断
+        }
+        
+        // 检查是否有资源可消费
+        if (pool->count > 0) {
+            // 消费资源
+            resource = pool->resources[--pool->count];
+            pr_info("Semaphore Example: Consumer %d got resource %d, count = %d\n", 
+                    id, resource, pool->count);
+            
+            // 释放互斥锁
+            up(&pool->mutex);
+            
+            // 增加可用空间
+            up(&pool->sem);
+            
+            // 模拟消费时间
+            msleep_interruptible(3000);
+        } else {
+            // 没有资源，释放互斥锁并等待
+            pr_info("Semaphore Example: Consumer %d found empty pool\n", id);
+            up(&pool->mutex);
+            msleep_interruptible(500);
+        }
+    }
+    
+    pr_info("Semaphore Example: Consumer %d thread exiting\n", id);
+    return 0;
+}
+
+static int __init semaphore_example_init(void)
+{
+    int i, ret = 0;
+    static int thread_ids[3] = {1, 2, 3};
+    
+    pr_info("Semaphore Example: Module loaded\n");
+    
+    // 分配资源池
+    pool = kmalloc(sizeof(struct resource_pool), GFP_KERNEL);
+    if (!pool) {
+        pr_err("Semaphore Example: Failed to allocate memory\n");
+        return -ENOMEM;
+    }
+    
+    // 初始化资源池
+    pool->count = 0;
+    sema_init(&pool->sem, POOL_SIZE);    // 初始有POOL_SIZE个空槽
+    sema_init(&pool->mutex, 1);          // 互斥锁（二值信号量）
+    
+    // 初始化完成量
+    init_completion(&example_complete);
+    
+    // 创建生产者线程
+    producer_thread = kthread_run(producer_function, NULL, "semaphore_producer");
+    if (IS_ERR(producer_thread)) {
+        pr_err("Semaphore Example: Failed to create producer thread\n");
+        ret = PTR_ERR(producer_thread);
+        goto err_free;
+    }
+    
+    // 创建消费者线程
+    for (i = 0; i < 3; i++) {
+        consumer_threads[i] = kthread_run(consumer_function, &thread_ids[i], 
+                                           "semaphore_consumer_%d", i+1);
+        if (IS_ERR(consumer_threads[i])) {
+            pr_err("Semaphore Example: Failed to create consumer thread %d\n", i+1);
+            ret = PTR_ERR(consumer_threads[i]);
+            goto err_stop_threads;
+        }
+    }
+    
+    return 0;
+
+err_stop_threads:
+    // 停止已创建的线程
+    if (!IS_ERR(producer_thread)) {
+        kthread_stop(producer_thread);
+    }
+    
+    for (i = 0; i < 3; i++) {
+        if (!IS_ERR_OR_NULL(consumer_threads[i])) {
+            kthread_stop(consumer_threads[i]);
+        }
+    }
+    
+err_free:
+    kfree(pool);
+    return ret;
+}
+
+static void __exit semaphore_example_exit(void)
+{
+    int i;
+    
+    // 停止所有线程
+    if (producer_thread) {
+        kthread_stop(producer_thread);
+    }
+    
+    for (i = 0; i < 3; i++) {
+        if (consumer_threads[i]) {
+            kthread_stop(consumer_threads[i]);
+        }
+    }
+    
+    // 释放资源
+    kfree(pool);
+    
+    pr_info("Semaphore Example: Module unloaded\n");
+}
+
+module_init(semaphore_example_init);
+module_exit(semaphore_example_exit);
+</div>
+
+                        <h4 class="text-lg mt-4 mb-2">完成量示例</h4>
+                        <div class="code-block">
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/completion.h>
+#include <linux/kthread.h>
+#include <linux/delay.h>
+#include <linux/sched.h>
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Example");
+MODULE_DESCRIPTION("Completion Example");
+
+// 定义完成量
+static struct completion task_completion;
+
+// 定义工作线程
+static struct task_struct *worker_thread;
+
+// 工作线程函数
+static int worker_function(void *data)
+{
+    pr_info("Completion Example: Worker thread started\n");
+    
+    // 模拟工作负载
+    pr_info("Completion Example: Worker thread performing task...\n");
+    msleep(5000);  // 睡眠5秒模拟耗时任务
+    
+    pr_info("Completion Example: Worker thread completed task\n");
+    
+    // 通知完成
+    complete(&task_completion);
+    
+    // 模拟更多工作...
+    msleep(2000);
+    
+    // 再次通知完成
+    pr_info("Completion Example: Worker thread signaling second completion\n");
+    complete(&task_completion);
+    
+    while (!kthread_should_stop()) {
+        msleep(1000);
+    }
+    
+    pr_info("Completion Example: Worker thread exiting\n");
+    return 0;
+}
+
+static int __init completion_example_init(void)
+{
+    unsigned long timeout;
+    
+    pr_info("Completion Example: Module loaded\n");
+    
+    // 初始化完成量
+    init_completion(&task_completion);
+    
+    // 创建工作线程
+    worker_thread = kthread_run(worker_function, NULL, "completion_worker");
+    if (IS_ERR(worker_thread)) {
+        pr_err("Completion Example: Failed to create worker thread\n");
+        return PTR_ERR(worker_thread);
+    }
+    
+    // 等待第一次完成通知 (有超时)
+    pr_info("Completion Example: Main thread waiting for first completion\n");
+    timeout = wait_for_completion_timeout(&task_completion, msecs_to_jiffies(10000));
+    
+    if (timeout == 0) {
+        pr_info("Completion Example: Wait timed out\n");
+    } else {
+        pr_info("Completion Example: First completion received with %lu jiffies remaining\n", 
+                timeout);
+    }
+    
+    // 重新初始化完成量
+    reinit_completion(&task_completion);
+    
+    // 等待第二次完成 (可中断)
+    pr_info("Completion Example: Main thread waiting for second completion\n");
+    if (wait_for_completion_interruptible(&task_completion) < 0) {
+        pr_info("Completion Example: Wait was interrupted\n");
+    } else {
+        pr_info("Completion Example: Second completion received\n");
+    }
+    
+    return 0;
+}
+
+static void __exit completion_example_exit(void)
+{
+    // 停止工作线程
+    if (worker_thread) {
+        kthread_stop(worker_thread);
+    }
+    
+    pr_info("Completion Example: Module unloaded\n");
+}
+
+module_init(completion_example_init);
+module_exit(completion_example_exit);
+</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">实现差异与性能考量</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 gap-4">
+                    <h3 class="text-xl font-bold mb-4">实现差异</h3>
+                    <p class="mb-4">用户态和内核态信号量虽然功能相似，但在实现机制和特性上有一些关键区别：</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <h4 class="text-lg font-bold mb-2">用户态信号量</h4>
+                            <ul class="list-disc ml-8">
+                                <li>通常依赖系统调用来实现阻塞和唤醒</li>
+                                <li>POSIX信号量提供进程间和线程间两种形式</li>
+                                <li>System V信号量允许一次原子操作多个信号量</li>
+                                <li>有名信号量在文件系统中有持久表示</li>
+                                <li>支持超时等待，避免无限阻塞</li>
+                                <li>依赖操作系统的调度和上下文切换</li>
+                                <li>可能受到用户资源限制的约束</li>
+                            </ul>
+                        </div>
+                        
+                        <div>
+                            <h4 class="text-lg font-bold mb-2">内核态信号量</h4>
+                            <ul class="list-disc ml-8">
+                                <li>直接使用内核调度器实现睡眠和唤醒</li>
+                                <li>支持不同类型的睡眠（可中断/不可中断）</li>
+                                <li>读写信号量提供读者优先的访问模式</li>
+                                <li>完成量是针对特定同步场景的优化实现</li>
+                                <li>内核信号量可以与其他同步原语配合使用</li>
+                                <li>支持调试功能，如死锁检测和持有者追踪</li>
+                                <li>不适用于中断上下文（会导致睡眠）</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <h3 class="text-xl font-bold mt-6 mb-4">性能考量</h3>
+                    <ul class="list-disc ml-8">
+                        <li><strong>睡眠与唤醒开销</strong>：信号量涉及上下文切换，在高频竞争场景性能不如自旋锁</li>
+                        <li><strong>缓存一致性</strong>：多CPU系统中，信号量可能导致缓存行失效和总线流量</li>
+                        <li><strong>调度延迟</strong>：被唤醒的线程需要等待调度器重新调度执行</li>
+                        <li><strong>嵌套层次</strong>：嵌套获取多个信号量可能导致死锁，应使用一致的获取顺序</li>
+                        <li><strong>内存占用</strong>：内核信号量相比自旋锁需要更多内存来存储等待队列</li>
+                        <li><strong>系统调用开销</strong>：用户态信号量操作需要通过系统调用，额外增加开销</li>
+                        <li><strong>优先级反转</strong>：信号量可能导致优先级反转问题，内核提供优先级继承机制</li>
+                    </ul>
+                    
+                    <h3 class="text-xl font-bold mt-6 mb-4">信号量vs其他同步原语</h3>
+                    <table class="w-full">
+                        <tr>
+                            <th>特性</th>
+                            <th>信号量</th>
+                            <th>互斥锁</th>
+                            <th>自旋锁</th>
+                            <th>读写锁</th>
+                        </tr>
+                        <tr>
+                            <td>同时访问</td>
+                            <td>支持（计数信号量）</td>
+                            <td>不支持</td>
+                            <td>不支持</td>
+                            <td>支持（读操作）</td>
+                        </tr>
+                        <tr>
+                            <td>阻塞行为</td>
+                            <td>睡眠</td>
+                            <td>睡眠</td>
+                            <td>自旋等待</td>
+                            <td>睡眠/自旋（取决于实现）</td>
+                        </tr>
+                        <tr>
+                            <td>资源计数</td>
+                            <td>支持</td>
+                            <td>不支持</td>
+                            <td>不支持</td>
+                            <td>不支持</td>
+                        </tr>
+                        <tr>
+                            <td>适用场景</td>
+                            <td>控制访问数量<br>线程协作</td>
+                            <td>简单互斥</td>
+                            <td>短临界区<br>中断上下文</td>
+                            <td>读多写少场景</td>
+                        </tr>
+                        <tr>
+                            <td>上下文要求</td>
+                            <td>进程上下文</td>
+                            <td>进程上下文</td>
+                            <td>任何上下文</td>
+                            <td>取决于实现</td>
+                        </tr>
+                        <tr>
+                            <td>性能损耗</td>
+                            <td>中-高（上下文切换）</td>
+                            <td>中-高（上下文切换）</td>
+                            <td>低（高竞争时高）</td>
+                            <td>中（读操作低）</td>
+                        </tr>
+                        <tr>
+                            <td>典型用途</td>
+                            <td>有限资源分配<br>生产者-消费者</td>
+                            <td>简单数据保护</td>
+                            <td>中断处理<br>非常短的临界区</td>
+                            <td>读多写少的数据结构</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="mt-8 text-center text-gray-500 text-sm">
+            <p>© 2025 Linux同步原语对比 - 本网站仅供学习参考</p>
+        </footer>
+    </div>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>

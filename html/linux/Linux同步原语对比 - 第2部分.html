@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux同步原语对比</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        
+        .sidebar {
+            position: fixed;
+            width: 240px;
+            height: 100vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            background-color: #2d3748;
+        }
+        
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: #4a5568;
+            border-radius: 3px;
+        }
+        
+        .nav-link {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: #e2e8f0;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .nav-link:hover {
+            background-color: #4a5568;
+            border-left-color: #63b3ed;
+        }
+        
+        .nav-link.active {
+            background-color: #4a5568;
+            border-left-color: #4299e1;
+            font-weight: 600;
+        }
+        
+        .main-content {
+            margin-left: 240px;
+            padding: 1.5rem;
+        }
+        
+        .comparison-table th {
+            padding: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .comparison-table td {
+            padding: 1rem 0.75rem;
+            vertical-align: top;
+        }
+        
+        .section-container {
+            transition: transform 0.2s;
+        }
+        
+        .section-container:hover {
+            transform: translateY(-2px);
+        }
+        
+        code {
+            font-family: 'Cascadia Code', 'Source Code Pro', monospace;
+            background-color: #edf2f7;
+            padding: 0.1rem 0.3rem;
+            border-radius: 0.25rem;
+            font-size: 0.9em;
+            color: #2c5282;
+        }
+        
+        pre {
+            background-color: #f8fafc;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            overflow-x: auto;
+            border: 1px solid #e2e8f0;
+            margin: 0.5rem 0;
+        }
+        
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            color: #1a202c;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+        
+        .api-list {
+            column-count: 1;
+        }
+        
+        @media (min-width: 1024px) {
+            .api-list {
+                column-count: 2;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- 固定在左侧的导航栏 -->
+    <aside class="sidebar">
+        <div class="p-4 border-b border-gray-700">
+            <h1 class="text-xl font-bold text-white">Linux同步原语对比</h1>
+            <p class="text-sm text-gray-400 mt-1">用户态与内核态</p>
+        </div>
+        <nav class="pt-2">
+            <a href="#mutex" class="nav-link">
+                <span class="mr-2">🔒</span> 互斥锁 (Mutex)
+            </a>
+            <a href="#rwlock" class="nav-link">
+                <span class="mr-2">📖</span> 读写锁 (RW Lock)
+            </a>
+            <a href="#spinlock" class="nav-link active">
+                <span class="mr-2">🔄</span> 自旋锁 (Spinlock)
+            </a>
+            <a href="#semaphore" class="nav-link">
+                <span class="mr-2">🚦</span> 信号量 (Semaphore)
+            </a>
+            <a href="#seqlock" class="nav-link">
+                <span class="mr-2">📑</span> 顺序锁 (SeqLock)
+            </a>
+            <a href="#rcu" class="nav-link">
+                <span class="mr-2">🔄</span> RCU
+            </a>
+            <a href="#atomic" class="nav-link">
+                <span class="mr-2">⚛️</span> 原子操作 (Atomic)
+            </a>
+            <a href="#futex" class="nav-link">
+                <span class="mr-2">⏱️</span> Futex
+            </a>
+            <div class="mt-4 p-4 bg-gray-800 text-xs text-gray-400">
+                <p class="font-semibold text-gray-300 mb-1">导航说明</p>
+                <p>点击链接可直接跳转到对应的同步原语详情。</p>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- 主内容区域 -->
+    <main class="main-content pb-12">
+        <div class="max-w-6xl mx-auto">
+            <!-- 自旋锁 -->
+            <div id="spinlock" class="section-container bg-white rounded-lg shadow-md p-6 mb-8">
+                <h2 class="text-2xl font-bold mb-4 pb-2 border-b border-gray-200 flex items-center">
+                    <span class="mr-2 text-purple-600">🔄</span> 自旋锁 (Spinlock)
+                </h2>
+                
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded mb-6">
+                    <p class="font-medium">自旋锁是一种在等待锁释放时持续尝试获取锁而不让出CPU的同步机制，适用于短暂持有的锁。</p>
+                </div>
+                
+                <table class="comparison-table w-full border-collapse mb-4">
+                    <tr class="bg-gray-100 rounded-t-lg">
+                        <th class="border border-gray-300 rounded-tl-lg text-center w-1/2">用户态 (User Space)</th>
+                        <th class="border border-gray-300 rounded-tr-lg text-center w-1/2">内核态 (Kernel Space)</th>
+                    </tr>
+                    
+                    <!-- 头文件 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <code class="block my-2">#include &lt;pthread.h&gt;</code>
+                            <p class="text-gray-600 text-sm mt-1">注：POSIX没有专门的自旋锁头文件，使用pthread.h。</p>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <code class="block my-2">#include &lt;linux/spinlock.h&gt;</code>
+                        </td>
+                    </tr>
+                    
+                    <!-- 主要API -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>pthread_spin_init()</code></li>
+                                    <li><code>pthread_spin_destroy()</code></li>
+                                    <li><code>pthread_spin_lock()</code></li>
+                                    <li><code>pthread_spin_trylock()</code></li>
+                                    <li><code>pthread_spin_unlock()</code></li>
+                                </ul>
+                            </div>
+                            
+                            <div class="mt-3 p-3 bg-gray-50 rounded-md">
+                                <p class="text-sm text-gray-700">备注：用户态中自旋锁使用较少，通常的使用方式是在不适合使用mutex时使用原子操作或其他同步原语。</p>
+                            </div>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>DEFINE_SPINLOCK(name)</code></li>
+                                    <li><code>spin_lock_init()</code></li>
+                                    <li><code>spin_lock()</code></li>
+                                    <li><code>spin_unlock()</code></li>
+                                    <li><code>spin_trylock()</code></li>
+                                    <li><code>spin_is_locked()</code></li>
+                                    <li><code>spin_lock_irq()</code></li>
+                                    <li><code>spin_unlock_irq()</code></li>
+                                    <li><code>spin_lock_irqsave()</code></li>
+                                    <li><code>spin_unlock_irqrestore()</code></li>
+                                    <li><code>spin_lock_bh()</code></li>
+                                    <li><code>spin_unlock_bh()</code></li>
+                                </ul>
+                            </div>
+                            
+                            <p class="font-semibold mt-3">特殊变体:</p>
+                            <div class="mt-2">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li>
+                                        <strong>raw_spinlock_t:</strong> 在禁止抢占的情况下使用的自旋锁变体
+                                        <code class="block mt-1">#include &lt;linux/spinlock_types.h&gt;</code>
+                                    </li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- 使用示例 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">使用示例:</p>
+                            <pre><code>// 定义自旋锁
+pthread_spinlock_t spinlock;
+
+// 初始化（第二个参数为共享标志）
+// PTHREAD_PROCESS_PRIVATE - 只在单个进程的线程间共享
+// PTHREAD_PROCESS_SHARED - 可在多个进程间共享
+pthread_spin_init(&spinlock, PTHREAD_PROCESS_PRIVATE);
+
+// 获取锁
+pthread_spin_lock(&spinlock);
+// 临界区代码（应保持短小）
+// ...
+pthread_spin_unlock(&spinlock);
+
+// 尝试获取锁（非阻塞）
+if (pthread_spin_trylock(&spinlock) == 0) {
+    // 成功获取锁
+    // 临界区代码
+    // ...
+    pthread_spin_unlock(&spinlock);
+}
+
+// 销毁自旋锁
+pthread_spin_destroy(&spinlock);</code></pre>
+                            
+                            <div class="mt-3 p-3 bg-blue-50 rounded-md">
+                                <p class="text-sm text-blue-800 font-medium">自旋锁使用建议:</p>
+                                <ul class="list-disc ml-4 mt-1 text-sm text-blue-700">
+                                    <li>只用于预期能快速获取和释放的场景</li>
+                                    <li>临界区应非常短小</li>
+                                    <li>不适合在单核系统上使用</li>
+                                    <li>持有时不应调用可能阻塞的函数</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">使用示例:</p>
+                            <pre><code>// 定义自旋锁
+spinlock_t my_lock;
+
+// 初始化
+spin_lock_init(&my_lock);
+
+// 基本使用
+spin_lock(&my_lock);
+// 临界区代码（应保持短小）
+// ...
+spin_unlock(&my_lock);
+
+// 禁用中断的使用
+spin_lock_irq(&my_lock);
+// 临界区代码
+// ...
+spin_unlock_irq(&my_lock);
+
+// 保存中断状态的使用
+unsigned long flags;
+spin_lock_irqsave(&my_lock, flags);
+// 临界区代码
+// ...
+spin_unlock_irqrestore(&my_lock, flags);
+
+// 禁用软中断的使用
+spin_lock_bh(&my_lock);
+// 临界区代码
+// ...
+spin_unlock_bh(&my_lock);
+
+// 静态定义和初始化
+DEFINE_SPINLOCK(static_lock);
+spin_lock(&static_lock);
+// 临界区代码
+// ...
+spin_unlock(&static_lock);</code></pre>
+                            
+                            <div class="mt-3 p-3 bg-red-50 rounded-md">
+                                <p class="text-sm text-red-800 font-medium">重要限制:</p>
+                                <ul class="list-disc ml-4 mt-1 text-sm text-red-700">
+                                    <li>持有自旋锁时绝对不能休眠或执行可能导致休眠的操作</li>
+                                    <li>避免长时间持有自旋锁</li>
+                                    <li>不要在已持有自旋锁的情况下再次获取同一个锁（死锁）</li>
+                                    <li>注意选择正确的中断变体以避免死锁</li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- 说明 -->
+                    <tr>
+                        <td class="border border-gray-300 rounded-bl-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">POSIX自旋锁是一种在等待获取锁时会持续尝试（自旋）而不会让出CPU的同步原语。特点如下：</p>
+                            <ul class="list-disc ml-6 mt-2 space-y-1">
+                                <li>适用于预期持有时间非常短暂的锁</li>
+                                <li>避免了上下文切换的开销，对于短期锁定可能比互斥锁更高效</li>
+                                <li>在单处理器系统上实现通常退化为互斥锁</li>
+                                <li>没有递归版本</li>
+                                <li>不支持超时获取</li>
+                                <li>持有期间应避免调用可能阻塞的函数</li>
+                                <li>在用户空间应用中使用较少，通常只在特定的高性能场景下使用</li>
+                            </ul>
+                            
+                            <p class="mt-3 text-sm text-gray-600">注意：在用户态，使用原子操作或无锁算法通常比使用自旋锁更为常见，尤其是在性能敏感的应用中。</p>
+                        </td>
+                        <td class="border border-gray-300 rounded-br-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">内核自旋锁是内核中最基本的锁类型之一，特点如下：</p>
+                            <ul class="list-disc ml-6 mt-2 space-y-1">
+                                <li>保护临界区时会自旋等待而不是让出CPU</li>
+                                <li>适用于极短暂的临界区和不能睡眠的上下文</li>
+                                <li>在获取锁时会禁止内核抢占（在CONFIG_PREEMPT开启的情况下）</li>
+                                <li>有多种变体，处理不同场景（普通、中断、底半部等）：
+                                    <ul class="list-disc ml-6 mt-1 space-y-1">
+                                        <li><strong>spin_lock():</strong> 基本自旋锁</li>
+                                        <li><strong>spin_lock_irq():</strong> 在获取锁的同时禁用中断</li>
+                                        <li><strong>spin_lock_irqsave():</strong> 禁用中断并保存之前的中断状态</li>
+                                        <li><strong>spin_lock_bh():</strong> 在获取锁的同时禁用软中断（底半部）</li>
+                                    </ul>
+                                </li>
+                                <li>可以在中断上下文中使用（使用适当的变体）</li>
+                                <li>持有期间不可休眠，即使是普通spinlock变体</li>
+                                <li>在单处理器系统上通常只禁用抢占而不实际自旋</li>
+                            </ul>
+                            
+                            <p class="mt-2 font-medium">使用场景选择:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>如果临界区很小，使用自旋锁</li>
+                                <li>如果临界区可能导致休眠，必须使用mutex或其他睡眠锁</li>
+                                <li>如果需要在中断上下文中使用，必须使用自旋锁</li>
+                                <li>如果只在进程上下文中使用且临界区可能较长，优先使用mutex</li>
+                            </ul>
+                        </td>
+                    </tr>
+                </table>
+                
+                <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p class="font-semibold text-blue-800">主要区别:</p>
+                    <ul class="list-disc ml-6 mt-2 text-blue-700 space-y-1">
+                        <li>内核自旋锁有更多变体，支持各种中断上下文场景</li>
+                        <li>内核自旋锁在获取时会禁止内核抢占</li>
+                        <li>内核自旋锁在单处理器系统上有特殊优化</li>
+                        <li>用户态自旋锁在多处理器系统上才有真正意义</li>
+                        <li>内核自旋锁使用更为广泛，用户态程序通常优先使用互斥锁</li>
+                        <li>内核自旋锁拥有更严格的使用规则和限制</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 信号量 -->
+            <div id="semaphore" class="section-container bg-white rounded-lg shadow-md p-6 mb-8">
+                <h2 class="text-2xl font-bold mb-4 pb-2 border-b border-gray-200 flex items-center">
+                    <span class="mr-2 text-red-600">🚦</span> 信号量 (Semaphore)
+                </h2>
+                
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded mb-6">
+                    <p class="font-medium">信号量是一种计数型同步原语，用于控制对有限资源的访问或实现生产者-消费者模式。</p>
+                </div>
+                
+                <table class="comparison-table w-full border-collapse mb-4">
+                    <tr class="bg-gray-100 rounded-t-lg">
+                        <th class="border border-gray-300 rounded-tl-lg text-center w-1/2">用户态 (User Space)</th>
+                        <th class="border border-gray-300 rounded-tr-lg text-center w-1/2">内核态 (Kernel Space)</th>
+                    </tr>
+                    
+                    <!-- 头文件 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <p class="mt-2">POSIX信号量:</p>
+                            <code class="block my-1">#include &lt;semaphore.h&gt;</code>
+                            
+                            <p class="mt-2">System V信号量:</p>
+                            <code class="block my-1">#include &lt;sys/sem.h&gt;</code>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <code class="block my-2">#include &lt;linux/semaphore.h&gt;</code>
+                        </td>
+                    </tr>
+                    
+                    <!-- 主要API -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">POSIX信号量主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>sem_init()</code> - 初始化无名信号量</li>
+                                    <li><code>sem_destroy()</code> - 销毁无名信号量</li>
+                                    <li><code>sem_open()</code> - 创建/打开命名信号量</li>
+                                    <li><code>sem_close()</code> - 关闭命名信号量</li>
+                                    <li><code>sem_unlink()</code> - 删除命名信号量</li>
+                                    <li><code>sem_wait()</code> - 等待信号量（减1）</li>
+                                    <li><code>sem_trywait()</code> - 非阻塞等待</li>
+                                    <li><code>sem_timedwait()</code> - 限时等待</li>
+                                    <li><code>sem_post()</code> - 释放信号量（加1）</li>
+                                    <li><code>sem_getvalue()</code> - 获取当前值</li>
+                                </ul>
+                            </div>
+                            
+                            <p class="font-semibold mt-3">System V信号量主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>semget()</code> - 创建/获取信号量集</li>
+                                    <li><code>semctl()</code> - 控制信号量操作</li>
+                                    <li><code>semop()</code> - 信号量操作</li>
+                                    <li><code>semtimedop()</code> - 带超时的操作</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>DEFINE_SEMAPHORE(name)</code></li>
+                                    <li><code>sema_init()</code> - 初始化信号量</li>
+                                    <li><code>down()</code> - 获取信号量（减1）</li>
+                                    <li><code>down_interruptible()</code> - 可中断获取</li>
+                                    <li><code>down_killable()</code> - 可被致命信号中断的获取</li>
+                                    <li><code>down_trylock()</code> - 非阻塞获取</li>
+                                    <li><code>down_timeout()</code> - 限时获取</li>
+                                    <li><code>up()</code> - 释放信号量（加1）</li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- 使用示例 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">POSIX信号量使用示例:</p>
+                            <pre><code>// 无名信号量
+sem_t sem;
+
+// 初始化信号量，初始值为1（第二个参数为0表示线程间共享）
+sem_init(&sem, 0, 1);
+
+// 等待信号量（P操作）
+sem_wait(&sem);
+// 临界区代码
+// ...
+// 释放信号量（V操作）
+sem_post(&sem);
+
+// 尝试获取信号量（非阻塞）
+if (sem_trywait(&sem) == 0) {
+    // 成功获取信号量
+    // 临界区代码
+    // ...
+    sem_post(&sem);
+}
+
+// 带超时的等待
+struct timespec ts;
+clock_gettime(CLOCK_REALTIME, &ts);
+ts.tv_sec += 2;  // 2秒超时
+if (sem_timedwait(&sem, &ts) == 0) {
+    // 成功获取信号量
+    // ...
+    sem_post(&sem);
+}
+
+// 销毁信号量
+sem_destroy(&sem);
+
+// 命名信号量示例
+sem_t *named_sem;
+
+// 创建或打开一个命名信号量
+named_sem = sem_open("/my_semaphore", O_CREAT, 0644, 1);
+// 使用方式与无名信号量相同
+sem_wait(named_sem);
+// ...
+sem_post(named_sem);
+// 关闭信号量（当前进程中）
+sem_close(named_sem);
+// 从系统中删除命名信号量
+sem_unlink("/my_semaphore");</code></pre>
+
+                            <p class="font-semibold mt-3">System V信号量使用示例:</p>
+                            <pre><code>// 获取或创建信号量集
+key_t key = ftok("/tmp/semfile", 'R');
+int semid = semget(key, 1, 0666 | IPC_CREAT);
+
+// 初始化信号量值为1
+union semun {
+    int val;
+    struct semid_ds *buf;
+    unsigned short *array;
+} arg;
+arg.val = 1;
+semctl(semid, 0, SETVAL, arg);
+
+// 等待信号量（P操作）
+struct sembuf sb;
+sb.sem_num = 0;  // 信号量集中的第一个信号量
+sb.sem_op = -1;  // 减1操作
+sb.sem_flg = 0;  // 阻塞等待
+semop(semid, &sb, 1);
+
+// 临界区代码
+// ...
+
+// 释放信号量（V操作）
+sb.sem_op = 1; // 信号量加1
+semop(semid, &sb, 1);
+
+// 删除信号量
+semctl(semid, 0, IPC_RMID);</code></pre>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">使用示例:</p>
+                            <pre><code>// 定义信号量
+struct semaphore my_sem;
+
+// 初始化为1（互斥信号量）
+sema_init(&my_sem, 1);
+
+// 或使用宏（仅用于互斥信号量）
+// DECLARE_MUTEX(my_sem);
+
+// 获取信号量
+down(&my_sem);
+// 临界区代码
+// ...
+// 释放信号量
+up(&my_sem);
+
+// 可中断获取
+if (down_interruptible(&my_sem) != 0) {
+    // 被信号中断
+    return -EINTR;
+}
+// 临界区代码
+// ...
+up(&my_sem);
+
+// 尝试获取（非阻塞）
+if (down_trylock(&my_sem) == 0) {
+    // 成功获取信号量
+    // 临界区代码
+    // ...
+    up(&my_sem);
+} else {
+    // 无法获取信号量
+    // 执行替代操作
+}
+
+// 带超时的获取
+if (down_timeout(&my_sem, HZ * 5) == 0) {  // 等待最多5秒
+    // 成功获取信号量
+    // 临界区代码
+    // ...
+    up(&my_sem);
+} else {
+    // 超时
+    // 执行超时处理
+}</code></pre>
+                        </td>
+                    </tr>
+                    
+                    <!-- 说明 -->
+                    <tr>
+                        <td class="border border-gray-300 rounded-bl-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">用户态提供了两种信号量实现: POSIX和System V</p>
+                            
+                            <p class="mt-2 font-medium">POSIX信号量特点:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>API简单易用，更符合现代编程风格</li>
+                                <li>支持无名信号量（进程内或进程间共享）和命名信号量（进程间共享）</li>
+                                <li>提供超时获取功能</li>
+                                <li>性能通常优于System V信号量</li>
+                                <li>适合多线程应用和进程间同步</li>
+                                <li>可以实现互斥锁功能（初始值为1）或资源计数（初始值>1）</li>
+                            </ul>
+                            
+                            <p class="mt-2 font-medium">System V信号量特点:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>支持信号量集（多个信号量组合在一起）</li>
+                                <li>可以原子地操作多个信号量</li>
+                                <li>是传统Unix系统的一部分，兼容性更好</li>
+                                <li>API较为复杂，使用不太直观</li>
+                                <li>主要用于多进程间同步，而非线程间同步</li>
+                                <li>更重量级，通常不适用于高性能应用</li>
+                            </ul>
+                            
+                            <p class="mt-2 font-medium">使用场景:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>实现互斥锁功能（当初始值为1时）</li>
+                                <li>控制对有限资源的访问（资源计数信号量）</li>
+                                <li>同步相关操作（如生产者-消费者问题）</li>
+                                <li>进程间通信和同步</li>
+                            </ul>
+                        </td>
+                        <td class="border border-gray-300 rounded-br-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">内核信号量是一种可以使任务陷入睡眠的同步原语，通常用于保护可能长时间访问的资源。特点如下：</p>
+                            <ul class="list-disc ml-6 mt-2 space-y-1">
+                                <li>计数型同步原语，支持多个持有者（当初始计数大于1时）</li>
+                                <li>当计数为1时，作为互斥锁使用</li>
+                                <li>持有信号量时允许休眠</li>
+                                <li>不能在中断上下文或原子上下文中使用</li>
+                                <li>与内核互斥锁相比，信号量API更接近传统的信号量概念</li>
+                                <li>支持各种获取模式：阻塞、非阻塞、可中断、超时</li>
+                            </ul>
+
+                            <p class="mt-2 font-medium">使用场景:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>需要在持有锁时可能阻塞的操作</li>
+                                <li>需要限制并发访问数量的资源</li>
+                                <li>用于阻塞同步，如生产者-消费者模式</li>
+                                <li>当互斥锁功能不足以满足计数需求时</li>
+                            </ul>
+
+                            <p class="mt-2 font-medium">注意:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>现代内核代码中，对于简单的互斥访问，通常更推荐使用mutex而不是信号量</li>
+                                <li>只有当需要计数信号量（计数大于1）或者历史代码兼容性时才使用semaphore</li>
+                                <li>与自旋锁不同，信号量允许持有者休眠，因此更适合可能长时间持有的场景</li>
+                            </ul>
+                        </td>
+                    </tr>
+                </table>
+                
+                <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p class="font-semibold text-blue-800">主要区别:</p>
+                    <ul class="list-disc ml-6 mt-2 text-blue-700 space-y-1">
+                        <li>用户态提供两种信号量实现（POSIX和System V），而内核只有一种实现</li>
+                        <li>用户态的POSIX信号量支持命名信号量，可以通过名称在无关进程间共享</li>
+                        <li>内核信号量命名规则更简单，使用down/up而不是wait/post，但概念相似</li>
+                        <li>用户态System V信号量支持信号量集和对多个信号量的原子操作，内核不支持</li>
+                        <li>内核提供针对特定场景的API，如带中断处理的获取方式</li>
+                        <li>内核信号量不能在中断上下文中使用，有更严格的使用规则</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </main>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>

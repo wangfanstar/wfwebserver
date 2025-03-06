@@ -1,0 +1,659 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux同步原语对比</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        
+        .sidebar {
+            position: fixed;
+            width: 240px;
+            height: 100vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            background-color: #2d3748;
+        }
+        
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: #4a5568;
+            border-radius: 3px;
+        }
+        
+        .nav-link {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: #e2e8f0;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .nav-link:hover {
+            background-color: #4a5568;
+            border-left-color: #63b3ed;
+        }
+        
+        .nav-link.active {
+            background-color: #4a5568;
+            border-left-color: #4299e1;
+            font-weight: 600;
+        }
+        
+        .main-content {
+            margin-left: 240px;
+            padding: 1.5rem;
+        }
+        
+        .comparison-table th {
+            padding: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .comparison-table td {
+            padding: 1rem 0.75rem;
+            vertical-align: top;
+        }
+        
+        .section-container {
+            transition: transform 0.2s;
+        }
+        
+        .section-container:hover {
+            transform: translateY(-2px);
+        }
+        
+        code {
+            font-family: 'Cascadia Code', 'Source Code Pro', monospace;
+            background-color: #edf2f7;
+            padding: 0.1rem 0.3rem;
+            border-radius: 0.25rem;
+            font-size: 0.9em;
+            color: #2c5282;
+        }
+        
+        pre {
+            background-color: #f8fafc;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            overflow-x: auto;
+            border: 1px solid #e2e8f0;
+            margin: 0.5rem 0;
+        }
+        
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            color: #1a202c;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+        
+        .api-list {
+            column-count: 1;
+        }
+        
+        @media (min-width: 1024px) {
+            .api-list {
+                column-count: 2;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- 固定在左侧的导航栏 -->
+    <aside class="sidebar">
+        <div class="p-4 border-b border-gray-700">
+            <h1 class="text-xl font-bold text-white">Linux同步原语对比</h1>
+            <p class="text-sm text-gray-400 mt-1">用户态与内核态</p>
+        </div>
+        <nav class="pt-2">
+            <a href="#mutex" class="nav-link active">
+                <span class="mr-2">🔒</span> 互斥锁 (Mutex)
+            </a>
+            <a href="#rwlock" class="nav-link">
+                <span class="mr-2">📖</span> 读写锁 (RW Lock)
+            </a>
+            <a href="#spinlock" class="nav-link">
+                <span class="mr-2">🔄</span> 自旋锁 (Spinlock)
+            </a>
+            <a href="#semaphore" class="nav-link">
+                <span class="mr-2">🚦</span> 信号量 (Semaphore)
+            </a>
+            <a href="#seqlock" class="nav-link">
+                <span class="mr-2">📑</span> 顺序锁 (SeqLock)
+            </a>
+            <a href="#rcu" class="nav-link">
+                <span class="mr-2">🔄</span> RCU
+            </a>
+            <a href="#atomic" class="nav-link">
+                <span class="mr-2">⚛️</span> 原子操作 (Atomic)
+            </a>
+            <a href="#futex" class="nav-link">
+                <span class="mr-2">⏱️</span> Futex
+            </a>
+            <div class="mt-4 p-4 bg-gray-800 text-xs text-gray-400">
+                <p class="font-semibold text-gray-300 mb-1">导航说明</p>
+                <p>点击链接可直接跳转到对应的同步原语详情。</p>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- 主内容区域 -->
+    <main class="main-content pb-12">
+        <div class="max-w-6xl mx-auto">
+            <!-- 介绍 -->
+            <div class="bg-white rounded-lg shadow-md p-6 mb-8">
+                <h1 class="text-3xl font-bold mb-4">Linux同步原语对比</h1>
+                <p class="text-lg text-gray-700 mb-4">
+                    本文档比较了Linux系统中用户态和内核态的各种同步原语，包括它们的API、使用方式和特点。
+                </p>
+                <div class="bg-blue-50 border-l-4 border-blue-500 p-4 rounded-md">
+                    <p class="font-semibold text-blue-800">注意事项</p>
+                    <ul class="list-disc ml-6 text-blue-700 mt-1">
+                        <li>同步原语的选择应基于具体使用场景</li>
+                        <li>内核态的同步原语有更严格的使用规则</li>
+                        <li>某些同步原语在特定上下文中不应使用（如中断上下文）</li>
+                        <li>理解各种同步原语的特性对于开发高性能、无竞争的多线程程序至关重要</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 互斥锁 -->
+            <div id="mutex" class="section-container bg-white rounded-lg shadow-md p-6 mb-8">
+                <h2 class="text-2xl font-bold mb-4 pb-2 border-b border-gray-200 flex items-center">
+                    <span class="mr-2 text-blue-600">🔒</span> 互斥锁 (Mutex)
+                </h2>
+                
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded mb-6">
+                    <p class="font-medium">互斥锁是最基本和使用最广泛的同步原语，用于确保同一时间只有一个线程可以访问共享资源。</p>
+                </div>
+                
+                <table class="comparison-table w-full border-collapse mb-4">
+                    <tr class="bg-gray-100 rounded-t-lg">
+                        <th class="border border-gray-300 rounded-tl-lg text-center w-1/2">用户态 (User Space)</th>
+                        <th class="border border-gray-300 rounded-tr-lg text-center w-1/2">内核态 (Kernel Space)</th>
+                    </tr>
+                    
+                    <!-- 头文件 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <code class="block my-2">#include &lt;pthread.h&gt;</code>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <code class="block my-2">#include &lt;linux/mutex.h&gt;</code>
+                        </td>
+                    </tr>
+                    
+                    <!-- 主要API -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>pthread_mutex_init()</code></li>
+                                    <li><code>pthread_mutex_destroy()</code></li>
+                                    <li><code>pthread_mutex_lock()</code></li>
+                                    <li><code>pthread_mutex_trylock()</code></li>
+                                    <li><code>pthread_mutex_unlock()</code></li>
+                                    <li><code>pthread_mutex_timedlock()</code></li>
+                                </ul>
+                            </div>
+                            
+                            <p class="font-semibold mt-3">互斥锁属性:</p>
+                            <div class="mt-2">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>pthread_mutexattr_init()</code></li>
+                                    <li><code>pthread_mutexattr_destroy()</code></li>
+                                    <li><code>pthread_mutexattr_settype()</code></li>
+                                    <li>类型: 
+                                        <ul class="list-disc ml-6 mt-1 space-y-1">
+                                            <li><code>PTHREAD_MUTEX_NORMAL</code></li>
+                                            <li><code>PTHREAD_MUTEX_RECURSIVE</code></li>
+                                            <li><code>PTHREAD_MUTEX_ERRORCHECK</code></li>
+                                        </ul>
+                                    </li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>DEFINE_MUTEX(mutexname)</code></li>
+                                    <li><code>mutex_init()</code></li>
+                                    <li><code>mutex_lock()</code></li>
+                                    <li><code>mutex_lock_interruptible()</code></li>
+                                    <li><code>mutex_lock_killable()</code></li>
+                                    <li><code>mutex_trylock()</code></li>
+                                    <li><code>mutex_unlock()</code></li>
+                                    <li><code>mutex_is_locked()</code></li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- 使用示例 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">使用示例:</p>
+                            <pre><code>// 定义互斥锁
+pthread_mutex_t mutex;
+
+// 初始化默认互斥锁
+pthread_mutex_init(&mutex, NULL);
+
+// 获取锁
+pthread_mutex_lock(&mutex);
+// 临界区代码
+// ...
+// 释放锁
+pthread_mutex_unlock(&mutex);
+
+// 尝试获取锁（非阻塞）
+if (pthread_mutex_trylock(&mutex) == 0) {
+    // 成功获取锁
+    // 临界区代码
+    // ...
+    pthread_mutex_unlock(&mutex);
+}
+
+// 递归锁示例
+pthread_mutexattr_t attr;
+pthread_mutex_t recursive_mutex;
+
+pthread_mutexattr_init(&attr);
+pthread_mutexattr_settype(&attr, 
+    PTHREAD_MUTEX_RECURSIVE);
+pthread_mutex_init(&recursive_mutex, &attr);
+pthread_mutexattr_destroy(&attr);
+
+// 可以多次锁定递归锁
+pthread_mutex_lock(&recursive_mutex);
+pthread_mutex_lock(&recursive_mutex); // 不会阻塞
+pthread_mutex_unlock(&recursive_mutex);
+pthread_mutex_unlock(&recursive_mutex);</code></pre>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">使用示例:</p>
+                            <pre><code>// 定义互斥锁
+struct mutex my_mutex;
+
+// 初始化
+mutex_init(&my_mutex);
+
+// 基本使用
+mutex_lock(&my_mutex);
+// 临界区代码
+// ...
+mutex_unlock(&my_mutex);
+
+// 可中断获取锁
+if (mutex_lock_interruptible(&my_mutex) != 0) {
+    // 被信号中断
+    return -EINTR;
+}
+// 临界区代码
+// ...
+mutex_unlock(&my_mutex);
+
+// 尝试获取锁（非阻塞）
+if (mutex_trylock(&my_mutex)) {
+    // 成功获取锁
+    // 临界区代码
+    // ...
+    mutex_unlock(&my_mutex);
+}
+
+// 静态定义和初始化
+DEFINE_MUTEX(static_mutex);
+mutex_lock(&static_mutex);
+// 临界区代码
+// ...
+mutex_unlock(&static_mutex);</code></pre>
+                        </td>
+                    </tr>
+                    
+                    <!-- 说明 -->
+                    <tr>
+                        <td class="border border-gray-300 rounded-bl-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">POSIX互斥锁是用户空间最基本的互斥同步原语，特点如下：</p>
+                            <ul class="list-disc ml-6 mt-2 space-y-1">
+                                <li>允许线程在请求已被锁定的互斥锁时阻塞</li>
+                                <li>支持多种类型:
+                                    <ul class="list-disc ml-6 mt-1 space-y-1">
+                                        <li><strong>普通锁:</strong> 重复锁定导致死锁</li>
+                                        <li><strong>递归锁:</strong> 允许同一线程多次获取同一锁</li>
+                                        <li><strong>检错锁:</strong> 对错误使用返回错误码而不是未定义行为</li>
+                                    </ul>
+                                </li>
+                                <li>可以设置超时，避免无限期等待</li>
+                                <li>通常基于futex系统调用实现，结合用户空间自旋和内核等待</li>
+                                <li>轻量级，适合保护共享数据的访问</li>
+                            </ul>
+                        </td>
+                        <td class="border border-gray-300 rounded-br-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">内核互斥锁是一种睡眠锁，线程在等待锁时会让出处理器。特点如下：</p>
+                            <ul class="list-disc ml-6 mt-2 space-y-1">
+                                <li>适用于可能长时间持有的锁，或者临界区中需要执行可能阻塞的操作</li>
+                                <li>持有mutex时允许休眠，但不应在中断或原子上下文中使用</li>
+                                <li>不支持递归锁定（同一线程不能多次获取同一锁）</li>
+                                <li>实现更复杂但CPU使用效率更高，因为等待线程不会消耗CPU</li>
+                                <li>支持可中断获取，允许等待被信号中断</li>
+                                <li>没有超时获取的直接API（可通过其他机制实现）</li>
+                            </ul>
+                        </td>
+                    </tr>
+                </table>
+                
+                <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p class="font-semibold text-blue-800">主要区别:</p>
+                    <ul class="list-disc ml-6 mt-2 text-blue-700 space-y-1">
+                        <li>内核态mutex不支持递归锁，用户态pthread_mutex支持多种锁类型</li>
+                        <li>内核态mutex提供可中断的锁获取机制，更适合内核环境</li>
+                        <li>用户态mutex提供超时获取功能，内核没有直接对应API</li>
+                        <li>内核态mutex不能在中断上下文使用，而用户态没有这种限制</li>
+                        <li>两者实现机制不同：用户态通常基于futex，内核态有专门的调度考量</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 读写锁 -->
+            <div id="rwlock" class="section-container bg-white rounded-lg shadow-md p-6 mb-8">
+                <h2 class="text-2xl font-bold mb-4 pb-2 border-b border-gray-200 flex items-center">
+                    <span class="mr-2 text-green-600">📖</span> 读写锁 (RW Lock)
+                </h2>
+                
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded mb-6">
+                    <p class="font-medium">读写锁允许多个读操作并发执行，但写操作需要独占访问。适合读多写少的场景。</p>
+                </div>
+                
+                <table class="comparison-table w-full border-collapse mb-4">
+                    <tr class="bg-gray-100 rounded-t-lg">
+                        <th class="border border-gray-300 rounded-tl-lg text-center w-1/2">用户态 (User Space)</th>
+                        <th class="border border-gray-300 rounded-tr-lg text-center w-1/2">内核态 (Kernel Space)</th>
+                    </tr>
+                    
+                    <!-- 头文件 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <code class="block my-2">#include &lt;pthread.h&gt;</code>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <code class="block my-2">#include &lt;linux/rwlock.h&gt;</code> (自旋读写锁)<br>
+                            <code class="block my-2">#include &lt;linux/rwsem.h&gt;</code> (读写信号量)
+                        </td>
+                    </tr>
+                    
+                    <!-- 主要API -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>pthread_rwlock_init()</code></li>
+                                    <li><code>pthread_rwlock_destroy()</code></li>
+                                    <li><code>pthread_rwlock_rdlock()</code></li>
+                                    <li><code>pthread_rwlock_tryrdlock()</code></li>
+                                    <li><code>pthread_rwlock_wrlock()</code></li>
+                                    <li><code>pthread_rwlock_trywrlock()</code></li>
+                                    <li><code>pthread_rwlock_unlock()</code></li>
+                                    <li><code>pthread_rwlock_timedrdlock()</code></li>
+                                    <li><code>pthread_rwlock_timedwrlock()</code></li>
+                                </ul>
+                            </div>
+                            
+                            <p class="font-semibold mt-3">读写锁属性:</p>
+                            <div class="mt-2">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>pthread_rwlockattr_init()</code></li>
+                                    <li><code>pthread_rwlockattr_destroy()</code></li>
+                                    <li><code>pthread_rwlockattr_setkind_np()</code> (GNU扩展)</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">自旋读写锁主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>DEFINE_RWLOCK(name)</code></li>
+                                    <li><code>rwlock_init()</code></li>
+                                    <li><code>read_lock()</code></li>
+                                    <li><code>read_unlock()</code></li>
+                                    <li><code>write_lock()</code></li>
+                                    <li><code>write_unlock()</code></li>
+                                    <li><code>read_trylock()</code></li>
+                                    <li><code>write_trylock()</code></li>
+                                    <li><code>read_lock_irq()</code></li>
+                                    <li><code>write_lock_irq()</code></li>
+                                    <li><code>read_lock_irqsave()</code></li>
+                                    <li><code>write_lock_irqsave()</code></li>
+                                </ul>
+                            </div>
+                            
+                            <p class="font-semibold mt-3">读写信号量主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>DECLARE_RWSEM(name)</code></li>
+                                    <li><code>init_rwsem()</code></li>
+                                    <li><code>down_read()</code></li>
+                                    <li><code>down_read_trylock()</code></li>
+                                    <li><code>up_read()</code></li>
+                                    <li><code>down_write()</code></li>
+                                    <li><code>down_write_trylock()</code></li>
+                                    <li><code>up_write()</code></li>
+                                    <li><code>downgrade_write()</code></li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- 使用示例 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">使用示例:</p>
+                            <pre><code>// 定义读写锁
+pthread_rwlock_t rwlock;
+
+// 初始化默认读写锁
+pthread_rwlock_init(&rwlock, NULL);
+
+// 读锁使用
+pthread_rwlock_rdlock(&rwlock);
+// 读取操作
+// ...
+pthread_rwlock_unlock(&rwlock);
+
+// 写锁使用
+pthread_rwlock_wrlock(&rwlock);
+// 写入操作
+// ...
+pthread_rwlock_unlock(&rwlock);
+
+// 尝试获取读锁（非阻塞）
+if (pthread_rwlock_tryrdlock(&rwlock) == 0) {
+    // 成功获取读锁
+    // 读取操作
+    // ...
+    pthread_rwlock_unlock(&rwlock);
+}
+
+// 带超时的等待
+struct timespec ts;
+clock_gettime(CLOCK_REALTIME, &ts);
+ts.tv_sec += 2;  // 2秒超时
+if (pthread_rwlock_timedrdlock(&rwlock, &ts) == 0) {
+    // 成功获取读锁
+    // ...
+    pthread_rwlock_unlock(&rwlock);
+}
+
+// 配置写者优先的读写锁 (GNU扩展)
+pthread_rwlockattr_t attr;
+pthread_rwlock_t pref_rwlock;
+
+pthread_rwlockattr_init(&attr);
+pthread_rwlockattr_setkind_np(&attr, 
+    PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP);
+pthread_rwlock_init(&pref_rwlock, &attr);
+pthread_rwlockattr_destroy(&attr);</code></pre>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">自旋读写锁使用示例:</p>
+                            <pre><code>// 定义读写自旋锁
+rwlock_t my_rwlock;
+
+// 初始化
+rwlock_init(&my_rwlock);
+
+// 读锁使用
+read_lock(&my_rwlock);
+// 读取操作
+// ...
+read_unlock(&my_rwlock);
+
+// 写锁使用
+write_lock(&my_rwlock);
+// 写入操作
+// ...
+write_unlock(&my_rwlock);
+
+// 保存中断状态的使用
+unsigned long flags;
+write_lock_irqsave(&my_rwlock, flags);
+// 写入操作
+// ...
+write_unlock_irqrestore(&my_rwlock, flags);</code></pre>
+
+                            <p class="font-semibold mt-3">读写信号量使用示例:</p>
+                            <pre><code>// 声明读写信号量
+struct rw_semaphore my_rwsem;
+
+// 初始化
+init_rwsem(&my_rwsem);
+
+// 读锁使用
+down_read(&my_rwsem);
+// 读取操作 (可以休眠)
+// ...
+up_read(&my_rwsem);
+
+// 写锁使用
+down_write(&my_rwsem);
+// 写入操作 (可以休眠)
+// ...
+up_write(&my_rwsem);
+
+// 写锁降级
+down_write(&my_rwsem);
+// 写入操作
+// ...
+// 将写锁降级为读锁
+downgrade_write(&my_rwsem);
+// 现在只持有读锁
+// ...
+up_read(&my_rwsem);</code></pre>
+                        </td>
+                    </tr>
+                    
+                    <!-- 说明 -->
+                    <tr>
+                        <td class="border border-gray-300 rounded-bl-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">POSIX读写锁允许多个线程同时读取共享资源，或单个线程独占写入。特点如下：</p>
+                            <ul class="list-disc ml-6 mt-2 space-y-1">
+                                <li>适合读多写少的场景，可以提高并发性能</li>
+                                <li>写锁具有排他性，读锁允许共享</li>
+                                <li>默认实现通常是读者优先，但GNU扩展允许配置偏好</li>
+                                <li>可以设置超时，避免无限期等待</li>
+                                <li>不支持升级（从读锁升级到写锁），可能导致死锁</li>
+                                <li>通常基于futex系统调用实现</li>
+                            </ul>
+                            
+                            <p class="mt-2 font-medium">读写锁策略:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li><strong>读者优先:</strong> 只要有活跃的读者，写者必须等待</li>
+                                <li><strong>写者优先:</strong> 新的读者必须等待已经等待的写者</li>
+                                <li><strong>公平策略:</strong> 按请求顺序处理读者和写者</li>
+                            </ul>
+                        </td>
+                        <td class="border border-gray-300 rounded-br-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">内核提供两种读写锁:</p>
+                            
+                            <p class="mt-2 font-medium">读写自旋锁 (rwlock_t):</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>自旋等待型读写锁，不会引起线程睡眠</li>
+                                <li>允许多个读者同时持有读锁，或单一写者持有写锁</li>
+                                <li>适用于短小临界区，通常用于保护频繁访问但很少修改的数据</li>
+                                <li>写者优先：当有写者在等待时，新的读者不能获取锁</li>
+                                <li>持有锁期间不允许休眠</li>
+                                <li>有专门的中断保护变体（如read_lock_irqsave）</li>
+                            </ul>
+                            
+                            <p class="mt-2 font-medium">读写信号量 (rw_semaphore):</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>睡眠型读写锁，线程在等待时会让出处理器</li>
+                                <li>适用于可能长时间持有的锁，或需要执行可能阻塞的操作</li>
+                                <li>可以在持有锁期间休眠，但不能在中断上下文中使用</li>
+                                <li>支持将写锁降级为读锁，但不支持将读锁升级为写锁</li>
+                                <li>没有中断上下文特殊变体，因为不能在中断上下文使用</li>
+                            </ul>
+                        </td>
+                    </tr>
+                </table>
+                
+                <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p class="font-semibold text-blue-800">主要区别:</p>
+                    <ul class="list-disc ml-6 mt-2 text-blue-700 space-y-1">
+                        <li>内核提供两种不同的读写锁实现：自旋型和睡眠型，而用户态只有一种实现</li>
+                        <li>内核读写锁有专门的中断保护变体（如read_lock_irqsave）</li>
+                        <li>内核读写信号量提供显式的写锁降级API，用户态无此功能</li>
+                        <li>用户态读写锁提供超时获取功能，内核API没有直接对应功能</li>
+                        <li>内核自旋读写锁在持有期间不允许休眠，而用户态没有这种限制</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </main>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>

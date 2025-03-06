@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux同步原语对比 - 原子操作</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+        }
+        .content {
+            margin-left: 250px;
+            padding: 20px;
+            width: calc(100% - 250px);
+        }
+        .sidebar-header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #34495e;
+        }
+        .nav-link {
+            display: block;
+            padding: 15px 20px;
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        .nav-link:hover {
+            background-color: #34495e;
+        }
+        .active {
+            background-color: #3498db;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .card-header {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+        }
+        .card-body {
+            padding: 20px;
+        }
+        .note-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre;
+            overflow-x: auto;
+            line-height: 1.5;
+            margin: 15px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2 class="text-xl font-bold">Linux同步原语对比</h2>
+        </div>
+        <nav>
+            <a href="index.html" class="nav-link">首页</a>
+            <a href="mutex.html" class="nav-link">互斥锁 (Mutex)</a>
+            <a href="rwlock.html" class="nav-link">读写锁 (RWLock)</a>
+            <a href="spinlock.html" class="nav-link">自旋锁 (Spinlock)</a>
+            <a href="atomic.html" class="nav-link active">原子操作 (Atomic)</a>
+            <a href="semaphore.html" class="nav-link">信号量 (Semaphore)</a>
+            <a href="rcu.html" class="nav-link">RCU</a>
+            <a href="seqlock.html" class="nav-link">顺序锁 (Seqlock)</a>
+            <a href="barrier.html" class="nav-link">内存屏障 (Barrier)</a>
+            <a href="rwbarrier.html" class="nav-link">读写屏障 (RW Barrier)</a>
+        </nav>
+    </div>
+
+    <div class="content">
+        <h1 class="text-3xl font-bold mb-6">原子操作 (Atomic)</h1>
+        
+        <div class="card">
+            <div class="card-header">原子操作概述</div>
+            <div class="card-body">
+                <p class="mb-4">原子操作是不可中断的操作，一旦开始执行，就会运行到完成，不会被其他线程或中断处理程序打断。原子操作是构建其他同步原语的基础，同时也可以直接用于简单的同步需求。</p>
+                
+                <p class="mb-4">原子操作的主要特点是：</p>
+                <ul class="list-disc ml-8 mb-4">
+                    <li>无需使用锁即可安全地在多线程或多处理器环境中操作共享变量</li>
+                    <li>通常依赖处理器提供的特殊指令实现（如Compare-and-Swap, Test-and-Set等）</li>
+                    <li>适用于简单的计数器、标志位和状态变量的操作</li>
+                    <li>比锁具有更低的开销，特别是在竞争不激烈的情况下</li>
+                    <li>常见操作包括：加/减、设置/清除位、读取和条件修改、交换值等</li>
+                </ul>
+                
+                <div class="note-box">
+                    <h3 class="font-bold text-lg mb-2">Dog250风格总结</h3>
+                    <p>原子操作是多处理器编程中的"无锁基石"，它不需要显式的锁保护，而是利用处理器硬件提供的原子指令直接实现线程安全。与其他同步原语相比，原子操作具有接近裸机的性能表现，是那些追求极致性能的开发者的必备工具。原子操作的精髓在于"一气呵成"，CPU确保操作不会在中途被打断，从而避免了数据竞争。在Linux内核中，原子操作随处可见，从引用计数到位操作，再到并发控制变量，都有它的身影。值得一提的是，原子操作并不仅仅是单个指令，有时它可能是由多条指令组成的序列，但这些指令序列在执行过程中会被硬件或软件机制保护，确保其原子性。与锁相比，原子操作少了获取和释放锁的环节，减少了上下文切换，提高了CPU缓存命中率，尤其适合高频短小的操作。但请记住，原子操作强大的同时也很"无情"—它不会主动让出CPU，在高竞争环境下可能导致处理器消耗大量时间在忙等待上。在实践中，内核开发者需要权衡使用原子操作还是传统锁机制，这取决于临界区大小、操作复杂度、竞争程度等因素。掌握原子操作，就像掌握了一把精巧的瑞士军刀，能够在合适的场景下精准解决并发问题。</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">		
+            <div class="card-header">用户态与内核态原子操作对比</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-center">用户态原子操作</h3>
+                        <p class="mb-4">用户态有多种原子操作API，主要包括：</p>
+                        <ul class="list-disc ml-8 mb-4">
+                            <li>C11/C++11标准原子操作</li>
+                            <li>GCC内置原子函数</li>
+                        </ul>
+                        
+                        <h4 class="text-lg font-bold mb-2">C11/C++11标准原子操作</h4>
+                        <table class="mb-6">
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>&lt;stdatomic.h&gt;</code> (C11) 或 <code>&lt;atomic&gt;</code> (C++11)</td>
+                            </tr>
+                            <tr>
+                                <th>基本类型</th>
+                                <td><code>atomic_int</code>, <code>atomic_long</code>, <code>atomic_flag</code> 等</td>
+                            </tr>
+                            <tr>
+                                <th>定义变量</th>
+                                <td>
+                                    <code>atomic_int counter = ATOMIC_VAR_INIT(0);</code><br>
+                                    <code>std::atomic&lt;int&gt; counter(0); // C++</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>基本操作</th>
+                                <td>
+                                    <code>atomic_load(&amp;counter);</code> - 原子读取<br>
+                                    <code>atomic_store(&amp;counter, 1);</code> - 原子存储<br>
+                                    <code>atomic_fetch_add(&amp;counter, 1);</code> - 原子加<br>
+                                    <code>atomic_fetch_sub(&amp;counter, 1);</code> - 原子减<br>
+                                    <code>atomic_exchange(&amp;counter, 10);</code> - 原子交换
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>CAS操作</th>
+                                <td>
+                                    <code>atomic_compare_exchange_strong(&amp;counter, &amp;expected, desired);</code><br>
+                                    <code>atomic_compare_exchange_weak(&amp;counter, &amp;expected, desired);</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>内存序</th>
+                                <td>
+                                    <code>memory_order_relaxed</code><br>
+                                    <code>memory_order_consume</code><br>
+                                    <code>memory_order_acquire</code><br>
+                                    <code>memory_order_release</code><br>
+                                    <code>memory_order_acq_rel</code><br>
+                                    <code>memory_order_seq_cst</code> (默认)
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <h4 class="text-lg font-bold mb-2">GCC内置原子函数</h4>
+                        <table>
+                            <tr>
+                                <th>头文件</th>
+                                <td>无需特定头文件</td>
+                            </tr>
+                            <tr>
+                                <th>基本操作</th>
+                                <td>
+                                    <code>__atomic_load_n(&amp;var, __ATOMIC_SEQ_CST);</code><br>
+                                    <code>__atomic_store_n(&amp;var, 1, __ATOMIC_SEQ_CST);</code><br>
+                                    <code>__atomic_add_fetch(&amp;var, 1, __ATOMIC_SEQ_CST);</code><br>
+                                    <code>__atomic_sub_fetch(&amp;var, 1, __ATOMIC_SEQ_CST);</code><br>
+                                    <code>__atomic_exchange_n(&amp;var, 10, __ATOMIC_SEQ_CST);</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>CAS操作</th>
+                                <td>
+                                    <code>__atomic_compare_exchange_n(&amp;var, &amp;expected, desired, 0, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>内存序</th>
+                                <td>
+                                    <code>__ATOMIC_RELAXED</code><br>
+                                    <code>__ATOMIC_CONSUME</code><br>
+                                    <code>__ATOMIC_ACQUIRE</code><br>
+                                    <code>__ATOMIC_RELEASE</code><br>
+                                    <code>__ATOMIC_ACQ_REL</code><br>
+                                    <code>__ATOMIC_SEQ_CST</code>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-center">内核态原子操作</h3>
+                        <p class="mb-4">Linux内核提供了两种主要的原子操作API：</p>
+                        <ul class="list-disc ml-8 mb-4">
+                            <li>整数原子操作 - 用于整型变量的原子操作</li>
+                            <li>位原子操作 - 用于对单个位进行原子操作</li>
+                        </ul>
+                        
+                        <h4 class="text-lg font-bold mb-2">整数原子操作</h4>
+                        <table class="mb-6">
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;linux/atomic.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>atomic_t</code> (32位), <code>atomic64_t</code> (64位)</td>
+                            </tr>
+                            <tr>
+                                <th>初始化</th>
+                                <td>
+                                    <code>atomic_t v = ATOMIC_INIT(0);</code><br>
+                                    <code>atomic64_t v = ATOMIC64_INIT(0);</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>基本操作</th>
+                                <td>
+                                    <code>atomic_read(&amp;v);</code> - 读取值<br>
+                                    <code>atomic_set(&amp;v, 1);</code> - 设置值<br>
+                                    <code>atomic_add(1, &amp;v);</code> - 加操作<br>
+                                    <code>atomic_sub(1, &amp;v);</code> - 减操作<br>
+                                    <code>atomic_inc(&amp;v);</code> - 自增<br>
+                                    <code>atomic_dec(&amp;v);</code> - 自减
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>读-修改-写操作</th>
+                                <td>
+                                    <code>atomic_add_return(1, &amp;v);</code> - 加并返回新值<br>
+                                    <code>atomic_sub_return(1, &amp;v);</code> - 减并返回新值<br>
+                                    <code>atomic_inc_return(&amp;v);</code> - 自增并返回<br>
+                                    <code>atomic_dec_return(&amp;v);</code> - 自减并返回<br>
+                                    <code>atomic_fetch_add(1, &amp;v);</code> - 加并返回旧值<br>
+                                    <code>atomic_fetch_sub(1, &amp;v);</code> - 减并返回旧值
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>条件操作</th>
+                                <td>
+                                    <code>atomic_dec_and_test(&amp;v);</code> - 自减并测试为零<br>
+                                    <code>atomic_inc_and_test(&amp;v);</code> - 自增并测试为零<br>
+                                    <code>atomic_add_negative(1, &amp;v);</code> - 加并测试为负<br>
+                                    <code>atomic_cmpxchg(&amp;v, old, new);</code> - 比较并交换
+                                </td>
+                            </tr>
+                        </table>
+                        
+                        <h4 class="text-lg font-bold mb-2">位原子操作</h4>
+                        <table>
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;linux/bitops.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td>通常操作 <code>unsigned long</code> 类型</td>
+                            </tr>
+                            <tr>
+                                <th>基本操作</th>
+                                <td>
+                                    <code>set_bit(0, &amp;word);</code> - 设置位<br>
+                                    <code>clear_bit(0, &amp;word);</code> - 清除位<br>
+                                    <code>change_bit(0, &amp;word);</code> - 翻转位<br>
+                                    <code>test_bit(0, &amp;word);</code> - 测试位
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>读-修改-写操作</th>
+                                <td>
+                                    <code>test_and_set_bit(0, &amp;word);</code> - 测试并设置位<br>
+                                    <code>test_and_clear_bit(0, &amp;word);</code> - 测试并清除位<br>
+                                    <code>test_and_change_bit(0, &amp;word);</code> - 测试并翻转位
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>内存序变体</th>
+                                <td>
+                                    <code>set_bit_relaxed(0, &amp;word);</code> - relaxed语义<br>
+                                    <code>set_bit_acquire(0, &amp;word);</code> - acquire语义<br>
+                                    <code>set_bit_release(0, &amp;word);</code> - release语义
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+		<div class="card">
+            <div class="card-header">使用示例</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">用户态原子操作</h3>
+                        <h4 class="text-lg mb-2">C11标准原子操作</h4>
+                        <div class="code-block">
+#include <stdio.h>
+#include <stdatomic.h>
+#include <threads.h>
+#include <stdint.h>
+
+// 定义原子计数器
+atomic_int counter = ATOMIC_VAR_INIT(0);
+
+// 线程函数 - 增加计数器
+int increment_thread(void* arg) {
+    int id = *(int*)arg;
+    int i;
+    
+    for (i = 0; i < 1000000; i++) {
+        // 原子加1并获取旧值
+        int old_value = atomic_fetch_add(&counter, 1);
+        if (i % 100000 == 0) {
+            printf("Thread %d: counter = %d\n", id, old_value);
+        }
+    }
+    
+    return 0;
+}
+
+// CAS循环实现
+int cas_increment(atomic_int* obj, int expected_step) {
+    int expected = atomic_load(obj);
+    int desired;
+    do {
+        desired = expected + expected_step;
+    } while (!atomic_compare_exchange_weak(obj, &expected, desired));
+    return desired;
+}
+
+int main() {
+    thrd_t threads[4];
+    int thread_ids[4] = {1, 2, 3, 4};
+    int i;
+    
+    // 创建线程
+    for (i = 0; i < 4; i++) {
+        thrd_create(&threads[i], increment_thread, &thread_ids[i]);
+    }
+    
+    // 等待线程结束
+    for (i = 0; i < 4; i++) {
+        thrd_join(threads[i], NULL);
+    }
+    
+    printf("Final counter value: %d\n", atomic_load(&counter));
+    
+    // 演示不同内存序的原子加载和存储
+    atomic_store_explicit(&counter, 0, memory_order_relaxed);
+    int val = atomic_load_explicit(&counter, memory_order_acquire);
+    printf("Value after relaxed store: %d\n", val);
+    
+    // 使用CAS循环增加值
+    int result = cas_increment(&counter, 10);
+    printf("After CAS increment: %d\n", result);
+    
+    return 0;
+}
+</div>
+
+                        <h4 class="text-lg mt-4 mb-2">GCC内置原子函数</h4>
+                        <div class="code-block">
+#include <stdio.h>
+#include <pthread.h>
+#include <stdbool.h>
+
+// 使用普通变量，但通过GCC原子操作访问
+int counter = 0;
+bool ready = false;
+
+void* worker(void* arg) {
+    int id = *(int*)arg;
+    
+    // 等待准备信号
+    while (!__atomic_load_n(&ready, __ATOMIC_ACQUIRE)) {
+        // 简单的忙等待
+        __builtin_ia32_pause(); // 在x86上增加忙等待效率
+    }
+    
+    for (int i = 0; i < 1000000; ++i) {
+        // 原子加1，宽松内存序
+        __atomic_fetch_add(&counter, 1, __ATOMIC_RELAXED);
+    }
+    
+    printf("Thread %d finished\n", id);
+    return NULL;
+}
+
+int main() {
+    pthread_t threads[4];
+    int thread_ids[4] = {0, 1, 2, 3};
+    
+    // 创建线程
+    for (int i = 0; i < 4; ++i) {
+        pthread_create(&threads[i], NULL, worker, &thread_ids[i]);
+    }
+    
+    printf("Starting threads...\n");
+    
+    // 发送准备信号
+    __atomic_store_n(&ready, true, __ATOMIC_RELEASE);
+    
+    // 等待所有线程完成
+    for (int i = 0; i < 4; ++i) {
+        pthread_join(threads[i], NULL);
+    }
+    
+    printf("Final counter value: %d\n", __atomic_load_n(&counter, __ATOMIC_RELAXED));
+    
+    // 演示原子比较交换
+    int expected = __atomic_load_n(&counter, __ATOMIC_RELAXED);
+    while (!__atomic_compare_exchange_n(
+        &counter, &expected, 0, false, 
+        __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
+    ) {
+        // 如果失败，expected会被更新为当前值
+        printf("CAS failed, counter is: %d\n", expected);
+    }
+    
+    printf("Counter reset to: %d\n", __atomic_load_n(&counter, __ATOMIC_RELAXED));
+    
+    return 0;
+}
+</div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">内核态原子操作</h3>
+                        <div class="code-block">
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/atomic.h>
+#include <linux/kthread.h>
+#include <linux/delay.h>
+#include <linux/sched.h>
+
+// 模块信息
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Example");
+MODULE_DESCRIPTION("Atomic Operations Example");
+
+// 定义原子整数
+static atomic_t counter = ATOMIC_INIT(0);
+
+// 定义64位原子整数
+static atomic64_t counter64 = ATOMIC64_INIT(0);
+
+// 定义位操作示例
+static unsigned long bitfield = 0;
+
+// 演示线程
+static struct task_struct *atomic_threads[4];
+
+static int atomic_thread_fn(void *data)
+{
+    int id = *(int*)data;
+    int i;
+    
+    printk(KERN_INFO "Atomic example: Thread %d starting\n", id);
+    
+    // 整数原子操作示例
+    for (i = 0; i < 1000000 && !kthread_should_stop(); i++) {
+        // 原子递增
+        atomic_inc(&counter);
+        
+        // 64位原子递增
+        atomic64_inc(&counter64);
+        
+        if (i % 100000 == 0) {
+            // 示例中线程可以暂时让出CPU
+            cond_resched();
+        }
+    }
+    
+    printk(KERN_INFO "Atomic example: Thread %d current counter: %d\n", 
+           id, atomic_read(&counter));
+    
+    return 0;
+}
+
+// 位原子操作示例函数
+static void bit_operations_demo(void)
+{
+    int bit_value;
+    
+    // 设置位0
+    set_bit(0, &bitfield);
+    printk(KERN_INFO "Atomic example: After set_bit(0): %lu\n", bitfield);
+    
+    // 设置位1
+    set_bit(1, &bitfield);
+    printk(KERN_INFO "Atomic example: After set_bit(1): %lu\n", bitfield);
+    
+    // 测试位0
+    bit_value = test_bit(0, &bitfield);
+    printk(KERN_INFO "Atomic example: test_bit(0): %d\n", bit_value);
+    
+    // 清除位0
+    clear_bit(0, &bitfield);
+    printk(KERN_INFO "Atomic example: After clear_bit(0): %lu\n", bitfield);
+    
+    // 测试并设置位2
+    bit_value = test_and_set_bit(2, &bitfield);
+    printk(KERN_INFO "Atomic example: test_and_set_bit(2) returned: %d, bitfield: %lu\n", 
+           bit_value, bitfield);
+    
+    // 测试并清除位1
+    bit_value = test_and_clear_bit(1, &bitfield);
+    printk(KERN_INFO "Atomic example: test_and_clear_bit(1) returned: %d, bitfield: %lu\n", 
+           bit_value, bitfield);
+    
+    // 翻转位3
+    change_bit(3, &bitfield);
+    printk(KERN_INFO "Atomic example: After change_bit(3): %lu\n", bitfield);
+}
+
+// 条件原子操作示例
+static void conditional_atomic_demo(void)
+{
+    // 设置为5
+    atomic_set(&counter, 5);
+    
+    // 自减并测试为零
+    if (atomic_dec_and_test(&counter)) {
+        printk(KERN_INFO "Atomic example: counter reached zero!\n");
+    } else {
+        printk(KERN_INFO "Atomic example: counter not zero: %d\n", 
+               atomic_read(&counter));
+    }
+    
+    // 添加负值测试结果是否为负
+    if (atomic_add_negative(-10, &counter)) {
+        printk(KERN_INFO "Atomic example: counter became negative!\n");
+    } else {
+        printk(KERN_INFO "Atomic example: counter not negative: %d\n", 
+               atomic_read(&counter));
+    }
+    
+    // 比较交换操作
+    if (atomic_cmpxchg(&counter, 10, 0) == 10) {
+        printk(KERN_INFO "Atomic example: CAS succeeded!\n");
+    } else {
+        printk(KERN_INFO "Atomic example: CAS failed, counter: %d\n", 
+               atomic_read(&counter));
+    }
+}
+
+static int __init atomic_example_init(void)
+{
+    int i;
+    static int thread_ids[4] = {0, 1, 2, 3};
+    
+    printk(KERN_INFO "Atomic Operations Example: initializing\n");
+    
+    // 运行位操作示例
+    bit_operations_demo();
+    
+    // 运行条件原子操作示例
+    conditional_atomic_demo();
+    
+    // 重置计数器
+    atomic_set(&counter, 0);
+    atomic64_set(&counter64, 0);
+    
+    // 创建线程
+    for (i = 0; i < 4; i++) {
+        atomic_threads[i] = kthread_run(atomic_thread_fn, &thread_ids[i], 
+                                         "atomic_test_%d", i);
+        if (IS_ERR(atomic_threads[i])) {
+            printk(KERN_ERR "Atomic example: error creating thread %d\n", i);
+            return PTR_ERR(atomic_threads[i]);
+        }
+    }
+    
+    return 0;
+}
+
+static void __exit atomic_example_exit(void)
+{
+    int i;
+    
+    // 停止所有线程
+    for (i = 0; i < 4; i++) {
+        if (atomic_threads[i]) {
+            kthread_stop(atomic_threads[i]);
+        }
+    }
+    
+    // 输出最终结果
+    printk(KERN_INFO "Atomic example: Final counter value: %d\n", 
+           atomic_read(&counter));
+    printk(KERN_INFO "Atomic example: Final counter64 value: %lld\n", 
+           atomic64_read(&counter64));
+    printk(KERN_INFO "Atomic example: Final bitfield value: %lu\n", bitfield);
+    printk(KERN_INFO "Atomic Operations Example: exiting\n");
+}
+
+module_init(atomic_example_init);
+module_exit(atomic_example_exit);
+</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">实现差异与性能考量</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 gap-4">
+                    <h3 class="text-xl font-bold mb-4">实现差异</h3>
+                    <p class="mb-4">用户态和内核态原子操作虽然概念相似，但实现和特性有一些重要差异：</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <h4 class="text-lg font-bold mb-2">用户态原子操作</h4>
+                            <ul class="list-disc ml-8">
+                                <li>基于标准C11规范，跨平台兼容性更好</li>
+                                <li>提供更丰富的内存序选项，允许细粒度控制</li>
+                                <li>可能受到编译器优化和重排序的影响</li>
+                                <li>没有单独的位操作API，位操作需要通过整数原子操作模拟</li>
+                                <li>在某些平台上可能降级为重量级锁实现</li>
+                                <li>原子变量不能在传递给函数时自动转换为整数</li>
+                                <li>新内核版本引入了许多带有不同内存序语义的原子操作变体</li>
+                            </ul>
+                        </div>
+                        
+                        <div>
+                            <h4 class="text-lg font-bold mb-2">内核态原子操作</h4>
+                            <ul class="list-disc ml-8">
+                                <li>为每个硬件架构提供专门优化的实现</li>
+                                <li>分为整数原子操作和位原子操作两个独立API</li>
+                                <li>内核原子变量类型(<code>atomic_t</code>)有值范围限制</li>
+                                <li>实现更加轻量，直接使用硬件原语</li>
+                                <li>内核原子操作可能使用特殊的编译器屏障和架构特定指令</li>
+                                <li>内核提供更多针对特定场景优化的变体(如irqsave版本)</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <h3 class="text-xl font-bold mt-6 mb-4">性能考量</h3>
+                    <ul class="list-disc ml-8">
+                        <li><strong>缓存一致性开销</strong>：在多处理器系统上，原子操作会引起缓存一致性流量，可能导致性能下降</li>
+                        <li><strong>内存序选择</strong>：选择适当的内存序可以显著影响性能，例如使用<code>memory_order_relaxed</code>而不是默认的顺序一致性</li>
+                        <li><strong>原子操作粒度</strong>：合并多个独立的原子操作可以减少同步开销</li>
+                        <li><strong>硬件支持</strong>：现代处理器通常有专门的原子指令，旧处理器可能需要锁定总线</li>
+                        <li><strong>局部性</strong>：频繁访问的原子变量可能导致"缓存行乒乓"，应考虑对齐和填充技术</li>
+                        <li><strong>竞争程度</strong>：高度竞争的原子操作可能导致性能严重下降，考虑使用分片技术</li>
+                        <li><strong>自旋与睡眠</strong>：原子操作在争用时会导致CPU忙等待，不适合长时间竞争的场景</li>
+                        <li><strong>体系结构影响</strong>：不同CPU架构的原子操作实现效率差异很大</li>
+                    </ul>
+                    
+                    <h3 class="text-xl font-bold mt-6 mb-4">何时使用原子操作vs锁</h3>
+                    <table class="w-full">
+                        <tr>
+                            <th>考虑因素</th>
+                            <th>原子操作</th>
+                            <th>锁机制</th>
+                        </tr>
+                        <tr>
+                            <td>操作复杂度</td>
+                            <td>简单的读-修改-写操作</td>
+                            <td>复杂的多步骤操作</td>
+                        </tr>
+                        <tr>
+                            <td>临界区大小</td>
+                            <td>极小（通常是单个变量）</td>
+                            <td>中等至大（多个语句）</td>
+                        </tr>
+                        <tr>
+                            <td>竞争程度</td>
+                            <td>低至中度竞争</td>
+                            <td>中度至高度竞争</td>
+                        </tr>
+                        <tr>
+                            <td>性能要求</td>
+                            <td>高性能、低延迟要求</td>
+                            <td>可接受上下文切换开销</td>
+                        </tr>
+                        <tr>
+                            <td>操作类型</td>
+                            <td>计数器、标志位、简单状态</td>
+                            <td>复杂数据结构、多变量同步</td>
+                        </tr>
+                        <tr>
+                            <td>代码可读性</td>
+                            <td>对简单操作较高</td>
+                            <td>对复杂同步较高</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="mt-8 text-center text-gray-500 text-sm">
+            <p>© 2025 Linux同步原语对比 - 本网站仅供学习参考</p>
+        </footer>
+    </div>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>

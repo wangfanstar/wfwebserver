@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux同步原语对比</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+        }
+        .content {
+            margin-left: 250px;
+            padding: 20px;
+            width: calc(100% - 250px);
+        }
+        .sidebar-header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #34495e;
+        }
+        .nav-link {
+            display: block;
+            padding: 15px 20px;
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        .nav-link:hover {
+            background-color: #34495e;
+        }
+        .active {
+            background-color: #3498db;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .card-header {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+        }
+        .card-body {
+            padding: 20px;
+        }
+        .note-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <h2 class="text-xl font-bold">Linux同步原语对比</h2>
+        </div>
+        <nav>
+            <a href="#" class="nav-link active">首页</a>
+            <a href="mutex.html" class="nav-link">互斥锁 (Mutex)</a>
+            <a href="rwlock.html" class="nav-link">读写锁 (RWLock)</a>
+            <a href="spinlock.html" class="nav-link">自旋锁 (Spinlock)</a>
+            <a href="atomic.html" class="nav-link">原子操作 (Atomic)</a>
+            <a href="semaphore.html" class="nav-link">信号量 (Semaphore)</a>
+            <a href="rcu.html" class="nav-link">RCU</a>
+            <a href="seqlock.html" class="nav-link">顺序锁 (Seqlock)</a>
+            <a href="barrier.html" class="nav-link">内存屏障 (Barrier)</a>
+            <a href="rwbarrier.html" class="nav-link">读写屏障 (RW Barrier)</a>
+        </nav>
+    </div>
+
+    <div class="content">
+        <h1 class="text-3xl font-bold mb-6">Linux同步原语对比</h1>
+        
+        <div class="card">
+            <div class="card-header">概述</div>
+            <div class="card-body">
+                <p class="mb-4">Linux系统中，同步原语是保证并发程序正确性的关键机制。它们在用户态和内核态都有对应的实现，但API和使用方式存在差异。本网站详细对比了Linux中各种同步原语在用户态和内核态的实现与用法。</p>
+                <p class="mb-4">同步原语主要解决以下问题：</p>
+                <ul class="list-disc ml-8 mb-4">
+                    <li>互斥访问共享资源</li>
+                    <li>防止竞态条件</li>
+                    <li>保证数据一致性</li>
+                    <li>控制执行顺序</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">用户态与内核态的主要区别</div>
+            <div class="card-body">
+                <p class="mb-4">用户态和内核态的同步原语虽然功能相似，但有几个关键区别：</p>
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-200">
+                            <th class="border p-3 text-left">特性</th>
+                            <th class="border p-3 text-left">用户态</th>
+                            <th class="border p-3 text-left">内核态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="border p-3">实现库</td>
+                            <td class="border p-3">主要为POSIX线程库(pthread)</td>
+                            <td class="border p-3">Linux内核自身实现</td>
+                        </tr>
+                        <tr>
+                            <td class="border p-3">API风格</td>
+                            <td class="border p-3">函数调用，返回错误码</td>
+                            <td class="border p-3">通常为宏或内联函数</td>
+                        </tr>
+                        <tr>
+                            <td class="border p-3">错误处理</td>
+                            <td class="border p-3">返回错误码</td>
+                            <td class="border p-3">通常不返回错误码</td>
+                        </tr>
+                        <tr>
+                            <td class="border p-3">内存分配</td>
+                            <td class="border p-3">栈或堆上分配</td>
+                            <td class="border p-3">特殊内存分配考虑</td>
+                        </tr>
+                        <tr>
+                            <td class="border p-3">中断上下文</td>
+                            <td class="border p-3">不存在此概念</td>
+                            <td class="border p-3">需考虑中断上下文的限制</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">同步原语设计哲学</div>
+            <div class="card-body">
+                <div class="note-box">
+                    <h3 class="font-bold text-lg mb-2">Dog250风格总结</h3>
+                    <p>Linux同步原语设计哲学一直遵循"机制与策略分离"原则，提供了从粗粒度到细粒度、从高开销到低开销的全套解决方案。其核心思想在于：针对不同场景选择恰当的锁，就像武功高手会根据对手选择合适的招式。过度使用重量级锁会导致性能下降，而滥用轻量级锁则可能造成逻辑错误。优秀的程序员应当理解各种同步原语的内部机制和适用场景，做到"知其然，知其所以然"。记住：锁的选择没有银弹，永远是在安全性和性能之间的权衡取舍。</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">内容导航</div>
+            <div class="card-body">
+                <p class="mb-4">点击左侧导航栏查看每种同步原语的详细对比：</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <a href="mutex.html" class="block p-6 bg-white hover:bg-blue-50 rounded shadow transition-colors">
+                        <h3 class="font-bold text-lg mb-2">互斥锁 (Mutex)</h3>
+                        <p class="text-gray-700">互斥锁是最基本的同步原语，用于保护临界区</p>
+                    </a>
+                    <a href="rwlock.html" class="block p-6 bg-white hover:bg-blue-50 rounded shadow transition-colors">
+                        <h3 class="font-bold text-lg mb-2">读写锁 (RWLock)</h3>
+                        <p class="text-gray-700">区分读写操作的锁，提高读操作的并发性</p>
+                    </a>
+                    <a href="spinlock.html" class="block p-6 bg-white hover:bg-blue-50 rounded shadow transition-colors">
+                        <h3 class="font-bold text-lg mb-2">自旋锁 (Spinlock)</h3>
+                        <p class="text-gray-700">通过忙等待实现的轻量级锁</p>
+                    </a>
+                    <a href="atomic.html" class="block p-6 bg-white hover:bg-blue-50 rounded shadow transition-colors">
+                        <h3 class="font-bold text-lg mb-2">原子操作 (Atomic)</h3>
+                        <p class="text-gray-700">不可分割的操作，实现无锁编程的基础</p>
+                    </a>
+                    <a href="semaphore.html" class="block p-6 bg-white hover:bg-blue-50 rounded shadow transition-colors">
+                        <h3 class="font-bold text-lg mb-2">信号量 (Semaphore)</h3>
+                        <p class="text-gray-700">控制并发访问资源数量的同步原语</p>
+                    </a>
+                    <a href="rcu.html" class="block p-6 bg-white hover:bg-blue-50 rounded shadow transition-colors">
+                        <h3 class="font-bold text-lg mb-2">RCU</h3>
+                        <p class="text-gray-700">读-复制-更新，读操作无需加锁的同步机制</p>
+                    </a>
+                    <a href="seqlock.html" class="block p-6 bg-white hover:bg-blue-50 rounded shadow transition-colors">
+                        <h3 class="font-bold text-lg mb-2">顺序锁 (Seqlock)</h3>
+                        <p class="text-gray-700">基于序列计数的读写同步机制</p>
+                    </a>
+                    <a href="barrier.html" class="block p-6 bg-white hover:bg-blue-50 rounded shadow transition-colors">
+                        <h3 class="font-bold text-lg mb-2">内存屏障 (Barrier)</h3>
+                        <p class="text-gray-700">控制内存访问顺序的低级同步原语</p>
+                    </a>
+                    <a href="rwbarrier.html" class="block p-6 bg-white hover:bg-blue-50 rounded shadow transition-colors">
+                        <h3 class="font-bold text-lg mb-2">读写屏障 (RW Barrier)</h3>
+                        <p class="text-gray-700">区分读写操作的内存屏障</p>
+                    </a>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="mt-8 text-center text-gray-500 text-sm">
+            <p>© 2025 Linux同步原语对比 - 本网站仅供学习参考</p>
+        </footer>
+    </div>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>

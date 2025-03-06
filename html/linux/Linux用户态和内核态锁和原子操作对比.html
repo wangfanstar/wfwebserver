@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux用户态和内核态锁和原子操作对比</title>
+	<link href="./tailwind.min.css" rel="stylesheet">
+    <style>
+        .tab-content {
+            display: none;
+        }
+        .tab-content.active {
+            display: block;
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div class="container mx-auto px-4 py-8 max-w-6xl">
+        <h1 class="text-3xl font-bold text-center mb-8 text-gray-800">Linux用户态和内核态锁和原子操作API对比</h1>
+        
+        <!-- 导航标签 -->
+        <div class="mb-6 flex flex-wrap justify-center gap-2">
+            <button onclick="showTab('mutex')" class="tab-btn bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">互斥锁</button>
+            <button onclick="showTab('semaphore')" class="tab-btn bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">信号量</button>
+            <button onclick="showTab('rwlock')" class="tab-btn bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">读写锁</button>
+            <button onclick="showTab('spinlock')" class="tab-btn bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">自旋锁</button>
+            <button onclick="showTab('rcu')" class="tab-btn bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">RCU</button>
+            <button onclick="showTab('atomic')" class="tab-btn bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded">原子操作</button>
+        </div>
+
+        <!-- 互斥锁 -->
+        <div id="mutex" class="tab-content active bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-700">互斥锁 (Mutex)</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="border border-gray-300 px-4 py-2 w-1/4">特性</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">用户态 (pthread)</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">内核态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">定义</td>
+                            <td class="border border-gray-300 px-4 py-2"><code>pthread_mutex_t mutex;</code></td>
+                            <td class="border border-gray-300 px-4 py-2"><code>struct mutex my_mutex;</code></td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">初始化</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>pthread_mutex_init(&mutex, NULL);</code><br>
+                                或 <code>pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>mutex_init(&my_mutex);</code><br>
+                                或 <code>DEFINE_MUTEX(my_mutex);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">加锁</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>pthread_mutex_lock(&mutex);</code><br>
+                                尝试加锁: <code>pthread_mutex_trylock(&mutex);</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>mutex_lock(&my_mutex);</code><br>
+                                尝试加锁: <code>mutex_trylock(&my_mutex);</code><br>
+                                可中断锁: <code>mutex_lock_interruptible(&my_mutex);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">解锁</td>
+                            <td class="border border-gray-300 px-4 py-2"><code>pthread_mutex_unlock(&mutex);</code></td>
+                            <td class="border border-gray-300 px-4 py-2"><code>mutex_unlock(&my_mutex);</code></td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">销毁</td>
+                            <td class="border border-gray-300 px-4 py-2"><code>pthread_mutex_destroy(&mutex);</code></td>
+                            <td class="border border-gray-300 px-4 py-2">通常不需要显式销毁</td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">特点</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 支持多种类型(普通、递归、错误检查等)<br>
+                                - 线程阻塞时会让出CPU<br>
+                                - 可能导致上下文切换
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 支持可中断加锁<br>
+                                - 适合长时间持有的锁<br>
+                                - 等待时进程会睡眠
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">使用场景</td>
+                            <td class="border border-gray-300 px-4 py-2">多线程应用中保护共享资源</td>
+                            <td class="border border-gray-300 px-4 py-2">内核中需要较长时间持有锁的情况</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 信号量 -->
+        <div id="semaphore" class="tab-content bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-700">信号量 (Semaphore)</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="border border-gray-300 px-4 py-2 w-1/4">特性</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">用户态 (POSIX)</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">内核态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">定义</td>
+                            <td class="border border-gray-300 px-4 py-2"><code>sem_t sem;</code></td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>struct semaphore sem;</code><br>
+                                计数信号量: <code>struct semaphore</code><br>
+                                二值信号量: <code>struct completion</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">初始化</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>sem_init(&sem, 0, value);</code><br>
+                                命名信号量: <code>sem_open("name", flags, mode, value);</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>sema_init(&sem, value);</code><br>
+                                或 <code>DEFINE_SEMAPHORE(sem);</code><br>
+                                二值信号量: <code>init_completion(&comp);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">P操作(获取)</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>sem_wait(&sem);</code><br>
+                                非阻塞: <code>sem_trywait(&sem);</code><br>
+                                带超时: <code>sem_timedwait(&sem, &ts);</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>down(&sem);</code><br>
+                                可中断: <code>down_interruptible(&sem);</code><br>
+                                非阻塞: <code>down_trylock(&sem);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">V操作(释放)</td>
+                            <td class="border border-gray-300 px-4 py-2"><code>sem_post(&sem);</code></td>
+                            <td class="border border-gray-300 px-4 py-2"><code>up(&sem);</code></td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">销毁</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>sem_destroy(&sem);</code><br>
+                                命名信号量: <code>sem_close(sem);</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">通常不需要显式销毁</td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">特点</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 计数型同步原语<br>
+                                - 可用于线程或进程间同步<br>
+                                - 支持命名和匿名信号量
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 内核中常用于资源计数<br>
+                                - 支持可中断等待<br>
+                                - 等待时进程会睡眠
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">使用场景</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 实现资源计数<br>
+                                - 生产者-消费者问题<br>
+                                - 进程间同步
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 限制对资源的并发访问<br>
+                                - 等待系统事件完成<br>
+                                - 线程同步
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 读写锁 -->
+        <div id="rwlock" class="tab-content bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-700">读写锁 (Reader-Writer Lock)</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="border border-gray-300 px-4 py-2 w-1/4">特性</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">用户态 (pthread)</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">内核态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">定义</td>
+                            <td class="border border-gray-300 px-4 py-2"><code>pthread_rwlock_t rwlock;</code></td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>struct rw_semaphore rw_sem;</code><br>
+                                <code>rwlock_t rwlock;</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">初始化</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>pthread_rwlock_init(&rwlock, NULL);</code><br>
+                                或 <code>pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>init_rwsem(&rw_sem);</code><br>
+                                或 <code>DEFINE_RWSEM(rw_sem);</code><br><br>
+                                自旋读写锁:<br>
+                                <code>rwlock_init(&rwlock);</code><br>
+                                或 <code>DEFINE_RWLOCK(rwlock);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">读锁获取</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>pthread_rwlock_rdlock(&rwlock);</code><br>
+                                尝试获取: <code>pthread_rwlock_tryrdlock(&rwlock);</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                读写信号量:<br>
+                                <code>down_read(&rw_sem);</code><br>
+                                尝试获取: <code>down_read_trylock(&rw_sem);</code><br><br>
+                                自旋读写锁:<br>
+                                <code>read_lock(&rwlock);</code><br>
+                                <code>read_lock_irq(&rwlock);</code><br>
+                                <code>read_lock_irqsave(&rwlock, flags);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">写锁获取</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>pthread_rwlock_wrlock(&rwlock);</code><br>
+                                尝试获取: <code>pthread_rwlock_trywrlock(&rwlock);</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                读写信号量:<br>
+                                <code>down_write(&rw_sem);</code><br>
+                                尝试获取: <code>down_write_trylock(&rw_sem);</code><br><br>
+                                自旋读写锁:<br>
+                                <code>write_lock(&rwlock);</code><br>
+                                <code>write_lock_irq(&rwlock);</code><br>
+                                <code>write_lock_irqsave(&rwlock, flags);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">读锁释放</td>
+                            <td class="border border-gray-300 px-4 py-2"><code>pthread_rwlock_unlock(&rwlock);</code></td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                读写信号量:<br>
+                                <code>up_read(&rw_sem);</code><br><br>
+                                自旋读写锁:<br>
+                                <code>read_unlock(&rwlock);</code><br>
+                                <code>read_unlock_irq(&rwlock);</code><br>
+                                <code>read_unlock_irqrestore(&rwlock, flags);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">写锁释放</td>
+                            <td class="border border-gray-300 px-4 py-2"><code>pthread_rwlock_unlock(&rwlock);</code></td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                读写信号量:<br>
+                                <code>up_write(&rw_sem);</code><br><br>
+                                自旋读写锁:<br>
+                                <code>write_unlock(&rwlock);</code><br>
+                                <code>write_unlock_irq(&rwlock);</code><br>
+                                <code>write_unlock_irqrestore(&rwlock, flags);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">销毁</td>
+                            <td class="border border-gray-300 px-4 py-2"><code>pthread_rwlock_destroy(&rwlock);</code></td>
+                            <td class="border border-gray-300 px-4 py-2">通常不需要显式销毁</td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">特点</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 允许多个读者同时访问<br>
+                                - 写者独占访问<br>
+                                - 适合读多写少的场景
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                读写信号量:<br>
+                                - 允许进程睡眠，适合长时间持有<br>
+                                - 可升级/降级锁<br><br>
+                                自旋读写锁:<br>
+                                - 不允许持有者睡眠<br>
+                                - 适合短时间持有
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">使用场景</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 读多写少的数据结构<br>
+                                - 共享配置访问<br>
+                                - 缓存访问
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                读写信号量:<br>
+                                - 需要长时间持有锁的读写分离场景<br><br>
+                                自旋读写锁:<br>
+                                - 中断上下文中需要读写分离的场景<br>
+                                - 短时间持有的读写锁
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 自旋锁 -->
+        <div id="spinlock" class="tab-content bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-700">自旋锁 (Spinlock)</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="border border-gray-300 px-4 py-2 w-1/4">特性</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">用户态</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">内核态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">定义</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>pthread_spinlock_t spinlock;</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>spinlock_t lock;</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">初始化</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>pthread_spin_init(&spinlock, 0);</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>spin_lock_init(&lock);</code><br>
+                                或 <code>DEFINE_SPINLOCK(lock);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">加锁</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>pthread_spin_lock(&spinlock);</code><br>
+                                尝试加锁: <code>pthread_spin_trylock(&spinlock);</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>spin_lock(&lock);</code><br>
+                                保存中断状态: <code>spin_lock_irqsave(&lock, flags);</code><br>
+                                禁止中断: <code>spin_lock_irq(&lock);</code><br>
+                                禁止软中断: <code>spin_lock_bh(&lock);</code><br>
+                                尝试加锁: <code>spin_trylock(&lock);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">解锁</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>pthread_spin_unlock(&spinlock);</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>spin_unlock(&lock);</code><br>
+                                恢复中断状态: <code>spin_unlock_irqrestore(&lock, flags);</code><br>
+                                恢复中断: <code>spin_unlock_irq(&lock);</code><br>
+                                恢复软中断: <code>spin_unlock_bh(&lock);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">销毁</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>pthread_spin_destroy(&spinlock);</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                通常不需要显式销毁
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">特点</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 线程不会进入睡眠状态<br>
+                                - 忙等待直到获得锁<br>
+                                - 适用于持有时间极短的锁<br>
+                                - 在多处理器系统上效率更高
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 内核最基本的锁机制<br>
+                                - 持有期间不能睡眠<br>
+                                - 可以在中断上下文使用<br>
+                                - 提供多种禁止中断的变体<br>
+                                - 只能适用于非常短暂的临界区
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">使用场景</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 极短的临界区<br>
+                                - 实时应用中避免优先级反转<br>
+                                - 对延迟敏感的应用
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 中断处理程序中<br>
+                                - 非常短的临界区<br>
+                                - 不能睡眠的上下文<br>
+                                - 中断处理和普通代码间的同步
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- RCU -->
+        <div id="rcu" class="tab-content bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-700">RCU (Read-Copy-Update)</h2>
+            <p class="mb-4">RCU主要在内核态使用，用户态有类似的库实现但不常用。</p>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="border border-gray-300 px-4 py-2 w-1/4">特性</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">用户态</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">内核态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">机制</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                有开源的用户态RCU实现库(liburcu)<br>
+                                但在用户空间不如在内核中普遍
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                内核原生支持的无锁同步机制，适用于读多写少的场景
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">读者操作</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>rcu_read_lock();</code><br>
+                                <code>// 访问RCU保护的数据</code><br>
+                                <code>rcu_read_unlock();</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>rcu_read_lock();</code><br>
+                                <code>// 访问RCU保护的数据</code><br>
+                                <code>rcu_read_unlock();</code><br><br>
+                                中断安全版本:<br>
+                                <code>rcu_read_lock_bh();</code><br>
+                                <code>rcu_read_unlock_bh();</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">写者操作</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>// 复制数据</code><br>
+                                <code>// 修改副本</code><br>
+                                <code>// 使用CAS原子替换指针</code><br>
+                                <code>// 等待宽限期结束</code><br>
+                                <code>// 释放旧数据</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>// 复制数据</code><br>
+                                <code>// 修改副本</code><br>
+                                <code>// 原子地更新指针</code><br>
+                                <code>rcu_assign_pointer(ptr, new_data);</code><br>
+                                <code>// 等待宽限期结束</code><br>
+                                <code>synchronize_rcu();</code><br>
+                                或 <code>call_rcu(&old_data->rcu_head, callback_func);</code><br>
+                                <code>// 在回调中释放旧数据</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">读取引用</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                通常使用原子操作或内存屏障
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>rcu_dereference(ptr);</code><br>
+                                不同场景的变体:<br>
+                                <code>rcu_dereference_bh(ptr);</code><br>
+                                <code>rcu_dereference_sched(ptr);</code>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">特点</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 用户态实现并不完全高效<br>
+                                - 需要手动管理内存<br>
+                                - 缺乏内核的调度支持
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 读者几乎无开销<br>
+                                - 读操作无需加锁或原子操作<br>
+                                - 非常适合读多写少场景<br>
+                                - 写者需要额外的复制开销<br>
+                                - 存在更新延迟
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">使用场景</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                用户空间中对性能极度敏感的读多写少场景
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 内核中的全局数据结构<br>
+                                - 设备驱动中的读多写少场景<br>
+                                - 路由表、网络协议栈<br>
+                                - 安全策略、配置信息
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- 原子操作 -->
+        <div id="atomic" class="tab-content bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-semibold mb-4 text-gray-700">原子操作 (Atomic Operations)</h2>
+            <div class="overflow-x-auto">
+                <table class="w-full border-collapse">
+                    <thead>
+                        <tr class="bg-gray-100">
+                            <th class="border border-gray-300 px-4 py-2 w-1/4">特性</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">用户态</th>
+                            <th class="border border-gray-300 px-4 py-2 w-1/2">内核态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">整数原子操作</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                GCC内置函数:<br>
+                                <code>__atomic_load_n(ptr, memorder);</code><br>
+                                <code>__atomic_store_n(ptr, val, memorder);</code><br>
+                                <code>__atomic_add_fetch(ptr, val, memorder);</code><br>
+                                <code>__atomic_sub_fetch(ptr, val, memorder);</code><br>
+                                <code>__atomic_exchange_n(ptr, val, memorder);</code><br><br>
+                                C++11 原子操作:<br>
+                                <code>std::atomic&lt;T&gt;</code> 类型
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>atomic_t v;</code> (整数类型)<br>
+                                <code>atomic_long_t v;</code> (长整数类型)<br><br>
+                                <code>atomic_set(&v, i);</code> (设置值)<br>
+                                <code>atomic_read(&v);</code> (读取值)<br>
+                                <code>atomic_add(i, &v);</code> (加法)<br>
+                                <code>atomic_sub(i, &v);</code> (减法)<br>
+                                <code>atomic_inc(&v);</code> (自增)<br>
+                                <code>atomic_dec(&v);</code> (自减)<br>
+                                <code>atomic_add_return(i, &v);</code> (加法并返回)<br>
+                                <code>atomic_inc_and_test(&v);</code> (自增并测试)
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">位原子操作</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                GCC内置函数:<br>
+                                <code>__atomic_test_and_set(ptr, memorder);</code><br>
+                                <code>__atomic_clear(ptr, memorder);</code><br><br>
+                                标准C库的<code>sig_atomic_t</code>类型
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>set_bit(nr, addr);</code> (设置位)<br>
+                                <code>clear_bit(nr, addr);</code> (清除位)<br>
+                                <code>change_bit(nr, addr);</code> (翻转位)<br>
+                                <code>test_bit(nr, addr);</code> (测试位)<br>
+                                <code>test_and_set_bit(nr, addr);</code> (测试并设置)<br>
+                                <code>test_and_clear_bit(nr, addr);</code> (测试并清除)
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">比较交换</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                GCC内置函数:<br>
+                                <code>__atomic_compare_exchange_n(ptr, expected, desired, weak, succ_mo, fail_mo);</code><br><br>
+                                C++11:<br>
+                                <code>atomic.compare_exchange_weak();</code><br>
+                                <code>atomic.compare_exchange_strong();</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>atomic_cmpxchg(&v, old, new);</code> (比较并交换)<br>
+                                <code>cmpxchg(ptr, old, new);</code> (通用比较交换)
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">内存屏障</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                GCC内置函数:<br>
+                                <code>__atomic_thread_fence(memorder);</code><br>
+                                <code>__atomic_signal_fence(memorder);</code><br><br>
+                                C++11:<br>
+                                <code>std::atomic_thread_fence(std::memory_order);</code>
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                <code>mb();</code> (完全内存屏障)<br>
+                                <code>rmb();</code> (读内存屏障)<br>
+                                <code>wmb();</code> (写内存屏障)<br>
+                                <code>smp_mb();</code> (SMP完全内存屏障)<br>
+                                <code>smp_rmb();</code> (SMP读内存屏障)<br>
+                                <code>smp_wmb();</code> (SMP写内存屏障)
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">特点</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 依赖编译器或CPU提供的原子指令<br>
+                                - C++11标准化了跨平台原子操作<br>
+                                - 可以在无锁数据结构中使用<br>
+                                - 适合简单计数器和标志位
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 针对内核特定需求优化<br>
+                                - 提供架构无关的接口<br>
+                                - 支持在所有上下文中使用<br>
+                                - 包含针对SMP和异步中断的变体
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="border border-gray-300 px-4 py-2 font-semibold bg-gray-50">使用场景</td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 简单计数器<br>
+                                - 标志位<br>
+                                - 无锁数据结构<br>
+                                - 高性能并发程序
+                            </td>
+                            <td class="border border-gray-300 px-4 py-2">
+                                - 内核计数器<br>
+                                - 引用计数<br>
+                                - 位图操作<br>
+                                - 并发数据结构中的同步
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <script>
+            function showTab(tabId) {
+                // 隐藏所有标签内容
+                const contents = document.querySelectorAll('.tab-content');
+                contents.forEach(content => {
+                    content.classList.remove('active');
+                });
+                
+                // 显示选中的标签
+                document.getElementById(tabId).classList.add('active');
+                
+                // 高亮当前选中的按钮
+                const buttons = document.querySelectorAll('.tab-btn');
+                buttons.forEach(button => {
+                    if (button.innerText.toLowerCase().includes(tabId) || 
+                        (tabId === 'mutex' && button.innerText.includes('互斥')) ||
+                        (tabId === 'semaphore' && button.innerText.includes('信号')) ||
+                        (tabId === 'rwlock' && button.innerText.includes('读写')) ||
+                        (tabId === 'spinlock' && button.innerText.includes('自旋')) ||
+                        (tabId === 'atomic' && button.innerText.includes('原子'))) {
+                        button.classList.add('bg-blue-700');
+                        button.classList.remove('bg-blue-500');
+                    } else {
+                        button.classList.remove('bg-blue-700');
+                        button.classList.add('bg-blue-500');
+                    }
+                });
+            }
+        </script>
+    </div>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>

@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux同步原语对比</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f5f7fa;
+            color: #333;
+        }
+        
+        .sidebar {
+            position: fixed;
+            width: 240px;
+            height: 100vh;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            background-color: #2d3748;
+        }
+        
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+        
+        .sidebar::-webkit-scrollbar-thumb {
+            background-color: #4a5568;
+            border-radius: 3px;
+        }
+        
+        .nav-link {
+            display: block;
+            padding: 0.75rem 1rem;
+            color: #e2e8f0;
+            border-left: 3px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .nav-link:hover {
+            background-color: #4a5568;
+            border-left-color: #63b3ed;
+        }
+        
+        .nav-link.active {
+            background-color: #4a5568;
+            border-left-color: #4299e1;
+            font-weight: 600;
+        }
+        
+        .main-content {
+            margin-left: 240px;
+            padding: 1.5rem;
+        }
+        
+        .comparison-table th {
+            padding: 0.75rem;
+            font-weight: 600;
+        }
+        
+        .comparison-table td {
+            padding: 1rem 0.75rem;
+            vertical-align: top;
+        }
+        
+        .section-container {
+            transition: transform 0.2s;
+        }
+        
+        .section-container:hover {
+            transform: translateY(-2px);
+        }
+        
+        code {
+            font-family: 'Cascadia Code', 'Source Code Pro', monospace;
+            background-color: #edf2f7;
+            padding: 0.1rem 0.3rem;
+            border-radius: 0.25rem;
+            font-size: 0.9em;
+            color: #2c5282;
+        }
+        
+        pre {
+            background-color: #f8fafc;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            overflow-x: auto;
+            border: 1px solid #e2e8f0;
+            margin: 0.5rem 0;
+        }
+        
+        pre code {
+            background-color: transparent;
+            padding: 0;
+            color: #1a202c;
+            font-size: 0.875rem;
+            line-height: 1.5;
+        }
+        
+        .api-list {
+            column-count: 1;
+        }
+        
+        @media (min-width: 1024px) {
+            .api-list {
+                column-count: 2;
+            }
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+    <!-- 固定在左侧的导航栏 -->
+    <aside class="sidebar">
+        <div class="p-4 border-b border-gray-700">
+            <h1 class="text-xl font-bold text-white">Linux同步原语对比</h1>
+            <p class="text-sm text-gray-400 mt-1">用户态与内核态</p>
+        </div>
+        <nav class="pt-2">
+            <a href="#mutex" class="nav-link">
+                <span class="mr-2">🔒</span> 互斥锁 (Mutex)
+            </a>
+            <a href="#rwlock" class="nav-link">
+                <span class="mr-2">📖</span> 读写锁 (RW Lock)
+            </a>
+            <a href="#spinlock" class="nav-link">
+                <span class="mr-2">🔄</span> 自旋锁 (Spinlock)
+            </a>
+            <a href="#semaphore" class="nav-link">
+                <span class="mr-2">🚦</span> 信号量 (Semaphore)
+            </a>
+            <a href="#seqlock" class="nav-link active">
+                <span class="mr-2">📑</span> 顺序锁 (SeqLock)
+            </a>
+            <a href="#rcu" class="nav-link">
+                <span class="mr-2">🔄</span> RCU
+            </a>
+            <a href="#atomic" class="nav-link">
+                <span class="mr-2">⚛️</span> 原子操作 (Atomic)
+            </a>
+            <a href="#futex" class="nav-link">
+                <span class="mr-2">⏱️</span> Futex
+            </a>
+            <div class="mt-4 p-4 bg-gray-800 text-xs text-gray-400">
+                <p class="font-semibold text-gray-300 mb-1">导航说明</p>
+                <p>点击链接可直接跳转到对应的同步原语详情。</p>
+            </div>
+        </nav>
+    </aside>
+
+    <!-- 主内容区域 -->
+    <main class="main-content pb-12">
+        <div class="max-w-6xl mx-auto">
+            <!-- 顺序锁 -->
+            <div id="seqlock" class="section-container bg-white rounded-lg shadow-md p-6 mb-8">
+                <h2 class="text-2xl font-bold mb-4 pb-2 border-b border-gray-200 flex items-center">
+                    <span class="mr-2 text-green-600">📑</span> 顺序锁 (SeqLock)
+                </h2>
+                
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded mb-6">
+                    <p class="font-medium">顺序锁是一种针对读写并发优化的同步机制，允许读者在写者修改数据时不阻塞，但需要在检测到并发写时重试读取操作。</p>
+                </div>
+                
+                <table class="comparison-table w-full border-collapse mb-4">
+                    <tr class="bg-gray-100 rounded-t-lg">
+                        <th class="border border-gray-300 rounded-tl-lg text-center w-1/2">用户态 (User Space)</th>
+                        <th class="border border-gray-300 rounded-tr-lg text-center w-1/2">内核态 (Kernel Space)</th>
+                    </tr>
+                    
+                    <!-- 头文件 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <p class="mt-2 text-gray-600 italic">POSIX标准未提供顺序锁，但可通过原子操作和内存屏障自行实现。</p>
+                            <p class="mt-2">使用C11原子操作:</p>
+                            <code class="block my-1">#include &lt;stdatomic.h&gt;</code>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <code class="block my-2">#include &lt;linux/seqlock.h&gt;</code>
+                        </td>
+                    </tr>
+                    
+                    <!-- 主要API -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">用户态无标准实现，下面是一个可能的自定义实现示例:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>seqlock_init()</code> - 初始化顺序锁</li>
+                                    <li><code>seqlock_read_begin()</code> - 开始读取，获取序列号</li>
+                                    <li><code>seqlock_read_retry()</code> - 检查读取是否需要重试</li>
+                                    <li><code>seqlock_write_begin()</code> - 开始写入</li>
+                                    <li><code>seqlock_write_end()</code> - 结束写入</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>DEFINE_SEQLOCK(name)</code> - 静态定义并初始化</li>
+                                    <li><code>seqlock_init()</code> - 初始化顺序锁</li>
+                                    <li><code>read_seqbegin()</code> - 开始读取，返回序列号</li>
+                                    <li><code>read_seqretry()</code> - 检查是否需要重试读取</li>
+                                    <li><code>read_seqbegin_irqsave()</code></li>
+                                    <li><code>read_seqretry_irqrestore()</code></li>
+                                    <li><code>write_seqlock()</code> - 获取写锁</li>
+                                    <li><code>write_sequnlock()</code> - 释放写锁</li>
+                                    <li><code>write_seqlock_irqsave()</code></li>
+                                    <li><code>write_sequnlock_irqrestore()</code></li>
+                                    <li><code>write_seqlock_irq()</code></li>
+                                    <li><code>write_sequnlock_irq()</code></li>
+                                    <li><code>write_seqlock_bh()</code></li>
+                                    <li><code>write_sequnlock_bh()</code></li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- 使用示例 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">自定义实现示例:</p>
+                            <pre><code>// 一个简单的顺序锁结构
+typedef struct {
+    atomic_uint sequence;
+    pthread_mutex_t lock;
+} user_seqlock_t;
+
+// 初始化顺序锁
+void user_seqlock_init(user_seqlock_t *sl) {
+    atomic_store(&sl->sequence, 0);
+    pthread_mutex_init(&sl->lock, NULL);
+}
+
+// 开始读取，获取序列号
+unsigned user_read_seqbegin(user_seqlock_t *sl) {
+    unsigned seq;
+    // 读取序列号（必须为偶数表示没有写入进行中）
+    do {
+        seq = atomic_load_explicit(&sl->sequence, 
+                                  memory_order_acquire);
+    } while (seq & 1);
+    return seq;
+}
+
+// 检查是否需要重试读取
+int user_read_seqretry(user_seqlock_t *sl, unsigned start) {
+    atomic_thread_fence(memory_order_acquire);
+    return start != atomic_load_explicit(&sl->sequence, 
+                                       memory_order_relaxed);
+}
+
+// 开始写入
+void user_write_seqlock(user_seqlock_t *sl) {
+    pthread_mutex_lock(&sl->lock);
+    atomic_fetch_add_explicit(&sl->sequence, 1, 
+                             memory_order_release);
+}
+
+// 结束写入
+void user_write_sequnlock(user_seqlock_t *sl) {
+    atomic_fetch_add_explicit(&sl->sequence, 1, 
+                             memory_order_release);
+    pthread_mutex_unlock(&sl->lock);
+}
+
+// 使用示例
+user_seqlock_t myseqlock;
+struct my_data {
+    int a, b;
+} protected_data;
+
+// 初始化
+user_seqlock_init(&myseqlock);
+
+// 读取操作
+void reader_thread() {
+    struct my_data local_copy;
+    unsigned seq;
+    do {
+        seq = user_read_seqbegin(&myseqlock);
+        // 读取数据到本地副本
+        local_copy = protected_data;
+    } while (user_read_seqretry(&myseqlock, seq));
+    
+    // 现在安全地使用local_copy
+    printf("Data: %d, %d\n", local_copy.a, local_copy.b);
+}
+
+// 写入操作
+void writer_thread() {
+    user_write_seqlock(&myseqlock);
+    // 修改数据
+    protected_data.a = 10;
+    protected_data.b = 20;
+    user_write_sequnlock(&myseqlock);
+}</code></pre>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">使用示例:</p>
+                            <pre><code>// 定义并初始化顺序锁
+seqlock_t my_seqlock;
+seqlock_init(&my_seqlock);
+
+// 或使用静态定义
+DEFINE_SEQLOCK(static_seqlock);
+
+// 受保护的数据结构
+struct my_protected_data {
+    int counter;
+    unsigned long timestamp;
+} my_data;
+
+// 读取操作
+unsigned int seq;
+struct my_protected_data local_copy;
+
+do {
+    seq = read_seqbegin(&my_seqlock);
+    
+    // 读取数据到本地副本
+    local_copy.counter = my_data.counter;
+    local_copy.timestamp = my_data.timestamp;
+    
+    // 检查是否需要重试读取
+} while (read_seqretry(&my_seqlock, seq));
+
+// 现在可以安全地使用local_copy中的数据
+
+// 带中断保护的读取
+unsigned long flags;
+do {
+    seq = read_seqbegin_irqsave(&my_seqlock, flags);
+    // 读取数据
+    // ...
+} while (read_seqretry_irqrestore(&my_seqlock, seq, flags));
+
+// 写入操作
+write_seqlock(&my_seqlock);
+// 修改受保护的数据
+my_data.counter++;
+my_data.timestamp = jiffies;
+write_sequnlock(&my_seqlock);
+
+// 带中断保护的写入
+unsigned long flags;
+write_seqlock_irqsave(&my_seqlock, flags);
+// 修改数据
+// ...
+write_sequnlock_irqrestore(&my_seqlock, flags);
+
+// 禁用中断的写入
+write_seqlock_irq(&my_seqlock);
+// 修改数据
+// ...
+write_sequnlock_irq(&my_seqlock);
+
+// 禁用软中断的写入
+write_seqlock_bh(&my_seqlock);
+// 修改数据
+// ...
+write_sequnlock_bh(&my_seqlock);</code></pre>
+                        </td>
+                    </tr>
+                    
+                    <!-- 说明 -->
+                    <tr>
+                        <td class="border border-gray-300 rounded-bl-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">顺序锁不是标准POSIX接口的一部分，但可以在用户态基于原子操作和互斥锁实现。特点如下：</p>
+                            <ul class="list-disc ml-6 mt-2 space-y-1">
+                                <li>适合读多写少的场景，但与读写锁不同，写操作优先级更高</li>
+                                <li>读取时不阻塞写入者，但写入会导致读取者重试</li>
+                                <li>通过序列号检测读取过程中是否发生了写入</li>
+                                <li>读者无锁，写者互斥</li>
+                                <li>读取效率很高，但需要处理重试逻辑</li>
+                                <li>适合保护很小的、读取频繁的数据结构</li>
+                                <li>不适合大型结构或复杂数据，因为重试会导致性能下降</li>
+                            </ul>
+                            
+                            <p class="mt-3 text-sm text-gray-600">自定义实现注意事项：</p>
+                            <ul class="list-disc ml-6 mt-1 text-sm text-gray-600">
+                                <li>需要正确使用内存序和内存屏障以确保跨CPU的可见性</li>
+                                <li>序列号通常为偶数表示无写操作，奇数表示写操作进行中</li>
+                                <li>读者需要在循环中多次尝试直到获得一致的数据</li>
+                                <li>适用于整数、时间戳等简单数据</li>
+                            </ul>
+                            
+                            <p class="mt-3 p-3 bg-blue-50 rounded-md">
+                                <span class="text-blue-800 font-medium">使用限制：</span> 顺序锁只适合保护基本数据类型，不适合包含指针的结构。读取过程中可能出现数据不一致状态，因此读者必须容忍暂时的不一致性，并在检测到写操作后重试。
+                            </p>
+                        </td>
+                        <td class="border border-gray-300 rounded-br-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">顺序锁是内核中的一种特殊同步原语，主要用于读多写少的场景。其核心特点如下：</p>
+                            <ul class="list-disc ml-6 mt-2 space-y-1">
+                                <li>允许读者无锁访问数据，但需处理读过程中写入的情况</li>
+                                <li>写者之间互斥访问，使用自旋锁机制</li>
+                                <li>当写者活跃时，读者不会被阻塞，而是后续检测并重试</li>
+                                <li>通过序列计数器（偶数表示无写操作，奇数表示有写操作）实现检测</li>
+                                <li>读取效率高，无锁操作，但存在重试开销</li>
+                                <li>写者优先，不会因读者而被饿死</li>
+                                <li>内核中常用于保护jiffies、时钟等读多写少的变量</li>
+                            </ul>
+                            
+                            <p class="mt-2 font-medium">主要特性:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>写操作必须是原子的，不能休眠</li>
+                                <li>写操作始终优先于读操作</li>
+                                <li>读操作期间允许数据暂时处于不一致状态，读完后检测重试</li>
+                                <li>内核提供多种中断上下文变体，适合不同场景</li>
+                                <li>相比读写锁，顺序锁在高并发读取时性能更好</li>
+                                <li>适合整数、时间戳等基本类型数据，不适合包含指针的结构</li>
+                            </ul>
+                            
+                            <p class="mt-2 font-medium">使用限制:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>不能保护包含指针的数据结构（重试时指针可能已无效）</li>
+                                <li>不适合大型结构或复杂数据</li>
+                                <li>写者必须能快速完成，不可休眠</li>
+                                <li>读者必须能处理读取过程中数据暂时不一致的情况</li>
+                                <li>主要适用于整数、时间戳等简单数据类型</li>
+                            </ul>
+                            
+                            <p class="mt-3 p-3 bg-red-50 rounded-md">
+                                <span class="text-red-800 font-medium">重要提示：</span> 在大多数情况下，如果不确定是否适合使用顺序锁，通常使用读写锁或RCU会是更安全的选择。顺序锁的使用场景较为特殊，主要针对性能极端敏感且数据结构简单的情况。
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+                
+                <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p class="font-semibold text-blue-800">主要区别:</p>
+                    <ul class="list-disc ml-6 mt-2 text-blue-700 space-y-1">
+                        <li>内核提供标准的顺序锁API，而用户态需要自行实现</li>
+                        <li>内核提供多种中断上下文变体，用户态没有此需求</li>
+                        <li>内核中顺序锁是常用的同步原语，用户态中使用较少</li>
+                        <li>内核的实现考虑了更多边界情况和底层硬件细节</li>
+                        <li>内核中顺序锁写锁是基于自旋锁实现，用户态通常基于互斥锁</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- RCU -->
+            <div id="rcu" class="section-container bg-white rounded-lg shadow-md p-6 mb-8">
+                <h2 class="text-2xl font-bold mb-4 pb-2 border-b border-gray-200 flex items-center">
+                    <span class="mr-2 text-indigo-600">🔄</span> RCU (Read-Copy-Update)
+                </h2>
+                
+                <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded mb-6">
+                    <p class="font-medium">RCU是一种针对读多写少场景的同步机制，允许读者几乎无锁访问数据，写者通过复制、修改和替换策略实现数据更新。</p>
+                </div>
+                
+                <table class="comparison-table w-full border-collapse mb-4">
+                    <tr class="bg-gray-100 rounded-t-lg">
+                        <th class="border border-gray-300 rounded-tl-lg text-center w-1/2">用户态 (User Space)</th>
+                        <th class="border border-gray-300 rounded-tr-lg text-center w-1/2">内核态 (Kernel Space)</th>
+                    </tr>
+                    
+                    <!-- 头文件 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <p class="mt-2">liburcu库:</p>
+                            <code class="block my-1">#include &lt;urcu.h&gt;</code>
+                            <p class="mt-2">或使用特定的RCU风格:</p>
+                            <code class="block my-1">#include &lt;urcu-qsbr.h&gt;</code>
+                            <code class="block my-1">#include &lt;urcu-mb.h&gt;</code>
+                            <code class="block my-1">#include &lt;urcu-bp.h&gt;</code>
+                            
+                            <p class="mt-2 text-sm text-gray-600">注：需要安装liburcu库，标准POSIX未提供RCU API。</p>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">头文件:</p>
+                            <code class="block my-2">#include &lt;linux/rcupdate.h&gt;</code>
+                            <p class="mt-2">用于RCU列表操作:</p>
+                            <code class="block my-1">#include &lt;linux/rculist.h&gt;</code>
+                        </td>
+                    </tr>
+                    
+                    <!-- 主要API -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">Userspace RCU (liburcu) 主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>rcu_read_lock()</code> - 进入RCU读端临界区</li>
+                                    <li><code>rcu_read_unlock()</code> - 退出RCU读端临界区</li>
+                                    <li><code>synchronize_rcu()</code> - 等待所有读者完成</li>
+                                    <li><code>call_rcu()</code> - 注册回调函数在宽限期结束后执行</li>
+                                    <li><code>rcu_assign_pointer()</code> - 更新指针（带内存屏障）</li>
+                                    <li><code>rcu_dereference()</code> - 读取指针（带内存屏障）</li>
+                                    <li><code>rcu_register_thread()</code> - 注册RCU线程</li>
+                                    <li><code>rcu_unregister_thread()</code> - 取消注册RCU线程</li>
+                                    <li><code>rcu_quiescent_state()</code> - 声明静默状态（QSBR风格）</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">主要API:</p>
+                            <div class="mt-2 api-list">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li><code>rcu_read_lock()</code> - 进入RCU读端临界区</li>
+                                    <li><code>rcu_read_unlock()</code> - 退出RCU读端临界区</li>
+                                    <li><code>synchronize_rcu()</code> - 等待所有读者完成</li>
+                                    <li><code>synchronize_rcu_expedited()</code> - 加速等待所有读者完成</li>
+                                    <li><code>call_rcu()</code> - 注册回调在宽限期后执行</li>
+                                    <li><code>kfree_rcu()</code> - 延迟释放内存</li>
+                                    <li><code>rcu_assign_pointer()</code> - 发布指向新数据的指针</li>
+                                    <li><code>rcu_dereference()</code> - 获取RCU保护的指针</li>
+                                    <li><code>rcu_dereference_bh()</code> - 底半部版本</li>
+                                    <li><code>rcu_dereference_sched()</code> - 抢占版本</li>
+                                    <li><code>RCU_INIT_POINTER()</code> - 初始化RCU保护的指针</li>
+                                </ul>
+                            </div>
+                            
+                            <p class="font-semibold mt-3">RCU变体:</p>
+                            <div class="mt-1">
+                                <ul class="list-disc ml-6 space-y-1">
+                                    <li>普通RCU: 常规用途</li>
+                                    <li>SRCU (Sleepable RCU): 允许读者休眠</li>
+                                    <li>PREEMPT_RCU: 针对可抢占内核的优化</li>
+                                    <li>Tasks RCU: 专为特殊任务设计的RCU</li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                    
+                    <!-- 使用示例 -->
+                    <tr>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">liburcu使用示例:</p>
+                            <pre><code>// 初始化liburcu (只需一次)
+#include &lt;urcu.h&gt;
+
+// 全局数据
+struct my_data {
+    int value;
+};
+struct my_data *global_ptr = NULL;
+
+// 所有线程必须注册
+void *reader_thread(void *arg) {
+    rcu_register_thread();
+    
+    // 读取操作
+    rcu_read_lock();
+    struct my_data *local_ptr = rcu_dereference(global_ptr);
+    if (local_ptr) {
+        // 使用 local_ptr->value
+        printf("Value: %d\n", local_ptr->value);
+    }
+    rcu_read_unlock();
+    
+    // 线程结束时注销
+    rcu_unregister_thread();
+    return NULL;
+}
+
+// 更新操作
+void updater_thread(void) {
+    // 创建新的节点
+    struct my_data *new_data = malloc(sizeof(*new_data));
+    new_data->value = 42;
+    
+    // 旧节点的副本（用于后续释放）
+    struct my_data *old_data = global_ptr;
+    
+    // 更新全局指针
+    rcu_assign_pointer(global_ptr, new_data);
+    
+    // 等待所有读者完成访问旧数据
+    synchronize_rcu();
+    
+    // 安全释放旧数据
+    free(old_data);
+}
+
+// 使用回调的方式释放
+void cb_free(struct rcu_head *head) {
+    struct my_data *ptr = container_of(head, struct my_data, rcu_head);
+    free(ptr);
+}
+
+void updater_with_callback(void) {
+    struct my_data *new_data = malloc(sizeof(*new_data));
+    new_data->value = 100;
+    
+    struct my_data *old_data = global_ptr;
+    rcu_assign_pointer(global_ptr, new_data);
+    
+    // 注册回调而非同步等待
+    call_rcu(&old_data->rcu_head, cb_free);
+}</code></pre>
+                            
+                            <p class="mt-3 text-sm text-gray-700">QSBR (Quiescent State Based RCU) 示例:</p>
+                            <pre><code>#include &lt;urcu-qsbr.h&gt;
+
+// 使用QSBR风格的线程需要定期调用
+void *qsbr_thread(void *arg) {
+    rcu_register_thread();
+    
+    while (running) {
+        // 执行一些工作...
+        
+        // 读取RCU保护的数据
+        rcu_read_lock();
+        struct my_data *data = rcu_dereference(global_ptr);
+        // 使用data...
+        rcu_read_unlock();
+        
+        // 定期声明静默状态
+        rcu_quiescent_state();
+    }
+    
+    rcu_unregister_thread();
+    return NULL;
+}</code></pre>
+                        </td>
+                        <td class="border border-gray-300">
+                            <p class="font-semibold">基本使用示例:</p>
+                            <pre><code>// 一个RCU保护的结构体
+struct my_data {
+    int value;
+    struct rcu_head rcu;
+};
+
+struct my_data *global_data;
+
+// 读操作
+void reader_function(void)
+{
+    struct my_data *data;
+    int value;
+    
+    rcu_read_lock();
+    data = rcu_dereference(global_data);
+    if (data)
+        value = data->value;
+    rcu_read_unlock();
+    
+    // 使用读取到的value
+    printk("Read value: %d\n", value);
+}
+
+// 用于call_rcu的回调函数
+static void free_my_data(struct rcu_head *rcu)
+{
+    struct my_data *data = container_of(rcu, struct my_data, rcu);
+    kfree(data);
+}
+
+// 更新操作
+void updater_function(int new_value)
+{
+    struct my_data *new_data, *old_data;
+    
+    // 分配新节点
+    new_data = kmalloc(sizeof(*new_data), GFP_KERNEL);
+    if (!new_data)
+        return;
+    
+    // 初始化新数据
+    new_data->value = new_value;
+    
+    // 保存旧数据引用
+    old_data = global_data;
+    
+    // 发布新数据
+    rcu_assign_pointer(global_data, new_data);
+    
+    // 方法1：同步等待RCU宽限期结束
+    synchronize_rcu();
+    kfree(old_data); // 安全释放旧数据
+    
+    // 方法2：使用回调异步释放（二选一）
+    // call_rcu(&old_data->rcu, free_my_data);
+    
+    // 方法3: 使用kfree_rcu简化版（二选一）
+    // kfree_rcu(old_data, rcu);
+}</code></pre>
+                            
+                            <p class="mt-3 text-sm text-gray-700">RCU列表操作示例:</p>
+                            <pre><code>#include &lt;linux/rculist.h&gt;
+
+// 列表节点结构
+struct my_item {
+    int key;
+    int value;
+    struct list_head list;
+    struct rcu_head rcu;
+};
+
+// 全局列表头
+LIST_HEAD(my_list);
+
+// 添加元素
+void add_item(int key, int value)
+{
+    struct my_item *item;
+    
+    item = kmalloc(sizeof(*item), GFP_KERNEL);
+    if (!item)
+        return;
+    
+    item->key = key;
+    item->value = value;
+    
+    // 添加到RCU保护的列表
+    list_add_rcu(&item->list, &my_list);
+}
+
+// 查找元素
+int find_item(int key)
+{
+    struct my_item *item;
+    int value = -1;
+    
+    rcu_read_lock();
+    list_for_each_entry_rcu(item, &my_list, list) {
+        if (item->key == key) {
+            value = item->value;
+            break;
+        }
+    }
+    rcu_read_unlock();
+    
+    return value;
+}
+
+// 回调函数释放节点
+static void free_item(struct rcu_head *rcu)
+{
+    struct my_item *item = container_of(rcu, struct my_item, rcu);
+    kfree(item);
+}
+
+// 删除元素
+void remove_item(int key)
+{
+    struct my_item *item;
+    
+    // 找到元素并从列表删除
+    list_for_each_entry(item, &my_list, list) {
+        if (item->key == key) {
+            list_del_rcu(&item->list);
+            call_rcu(&item->rcu, free_item);
+            break;
+        }
+    }
+}</code></pre>
+                        </td>
+                    </tr>
+                    
+                    <!-- 说明 -->
+                    <tr>
+                        <td class="border border-gray-300 rounded-bl-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">用户态RCU通过liburcu库提供，支持多种RCU风格。主要特点如下：</p>
+                            <ul class="list-disc ml-6 mt-2 space-y-1">
+                                <li>允许多个读者几乎无锁（最小开销）访问共享数据，无需等待</li>
+                                <li>写者通过复制原始数据、修改副本、然后更新引用来实现更新</li>
+                                <li>通过"宽限期"机制等待所有读者完成后再回收旧数据</li>
+                                <li>非常适合读多写少的场景，读取操作拥有极高性能</li>
+                                <li>liburcu支持多种RCU实现风格:
+                                    <ul class="list-disc ml-6 mt-1 space-y-1">
+                                        <li><strong>QSBR</strong>: 基于静默状态，性能最高但要求线程定期调用rcu_quiescent_state()</li>
+                                        <li><strong>MB</strong>: 基于内存屏障，对线程没有特殊要求但开销较大</li>
+                                        <li><strong>BP</strong>: 基于对线程屏蔽，无需注册线程但受性能限制</li>
+                                    </ul>
+                                </li>
+                                <li>用户态需要显式处理线程注册/注销，不像内核自动处理</li>
+                            </ul>
+                            
+                            <p class="mt-2 font-medium">使用限制:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>读者临界区不能包含指向被释放内存的引用</li>
+                                <li>读者不能修改被RCU保护的数据结构</li>
+                                <li>写者之间需要额外同步（通常使用互斥锁）</li>
+                                <li>需要更复杂的更新逻辑（分配、复制、替换、回收）</li>
+                                <li>占用更多内存（需要同时保存新旧数据副本）</li>
+                                <li>不适合写操作频繁的场景</li>
+                            </ul>
+                            
+                            <div class="mt-3 p-3 bg-blue-50 rounded-md">
+                                <p class="text-blue-800 font-medium">主要应用场景:</p>
+                                <ul class="list-disc ml-4 mt-1 text-blue-700">
+                                    <li>高性能读取要求的数据结构（链表、树等）</li>
+                                    <li>实时系统中避免读者被阻塞</li>
+                                    <li>读多写少的配置数据、路由表、缓存等</li>
+                                </ul>
+                            </div>
+                        </td>
+                        <td class="border border-gray-300 rounded-br-lg">
+                            <p class="font-semibold">说明:</p>
+                            <p class="mt-2">RCU（Read-Copy-Update）是Linux内核中的一种高级同步机制，用于支持高效的读操作。其核心特点如下：</p>
+                            <ul class="list-disc ml-6 mt-2 space-y-1">
+                                <li>允许读者几乎零开销访问共享数据</li>
+                                <li>读者不需要获取锁，无阻塞、无自旋、无原子操作</li>
+                                <li>更新通过复制-修改-替换的方式进行，而不是直接修改</li>
+                                <li>通过等待"宽限期"确保安全释放旧数据</li>
+                                <li>特别适合读多写少的场景，如网络路由表、配置数据等</li>
+                                <li>标准RCU中的读端不允许阻塞，但有特殊变体（SRCU）支持</li>
+                                <li>写者之间通常需要互斥（自旋锁或mutex）</li>
+                            </ul>
+                            
+                            <p class="mt-2 font-medium">RCU的三个基本操作:</p>
+                            <ol class="list-decimal ml-6 mt-1 space-y-1">
+                                <li><strong>删除:</strong> 从数据结构中删除元素，但不释放内存</li>
+                                <li><strong>等待:</strong> 等待所有读者完成对旧数据的访问</li>
+                                <li><strong>回收:</strong> 释放不再被引用的内存</li>
+                            </ol>
+                            
+                            <p class="mt-2 font-medium">主要优势:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>读者几乎零开销，无需锁定、原子操作或内存屏障</li>
+                                <li>读者可以在中断上下文、NMI或扩展关键区域安全执行</li>
+                                <li>写者开销分摊到异步清理阶段，减少写阻塞时间</li>
+                                <li>扩展性极佳，支持大量并发读者</li>
+                                <li>无读-写或写-写死锁风险</li>
+                                <li>内核提供专门的RCU链表、哈希表API，简化使用</li>
+                            </ul>
+                            
+                            <p class="mt-2 font-medium">使用限制:</p>
+                            <ul class="list-disc ml-6 mt-1 space-y-1">
+                                <li>标准RCU中读者不能休眠（有SRCU变体支持休眠）</li>
+                                <li>写者之间需要额外同步（通常使用锁）</li>
+                                <li>内存占用增加（需要维护新旧副本）</li>
+                                <li>写操作更复杂，存在额外开销</li>
+                                <li>不适合写频繁场景</li>
+                                <li>需要理解并正确处理内存屏障和指针访问</li>
+                            </ul>
+                            
+                            <div class="mt-3 p-3 bg-green-50 rounded-md">
+                                <p class="text-green-800 font-medium">内核RCU典型应用:</p>
+                                <ul class="list-disc ml-4 mt-1 text-green-700">
+                                    <li>网络协议栈中的路由表和连接跟踪</li>
+                                    <li>虚拟文件系统缓存</li>
+                                    <li>设备驱动程序中的配置信息</li>
+                                    <li>中断处理程序和状态管理</li>
+                                    <li>内核模块引用计数</li>
+                                </ul>
+                            </div>
+                        </td>
+                    </tr>
+                </table>
+                
+                <div class="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p class="font-semibold text-blue-800">主要区别:</p>
+                    <ul class="list-disc ml-6 mt-2 text-blue-700 space-y-1">
+                        <li>内核RCU深度集成于内核调度器和中断处理，而用户态RCU需要显式线程管理</li>
+                        <li>内核RCU有多种专门变体(SRCU、PREEMPT_RCU等)，用户态有不同实现风格(QSBR、MB等)</li>
+                        <li>内核提供丰富的RCU数据结构API（链表、哈希表等），用户态主要提供基础机制</li>
+                        <li>内核RCU针对特定硬件架构进行了优化，而用户态实现更通用</li>
+                        <li>用户态RCU需要第三方库支持，非标准POSIX功能</li>
+                        <li>内核RCU有更灵活的内存管理和回调机制</li>
+                        <li>内核RCU在性能和可扩展性方面更为优化</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </main>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>
