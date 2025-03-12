@@ -12,6 +12,7 @@
 
 #define MAX_CONF_LINE 1024  
 #define MAX_PATH_LEN 1024  
+#define MAX_NAME_LEN 1024 
 #define MAX_QUERY_LEN 4096  
 #define MAX_BOOKS 100  
 #define MAX_BOOK_NAME_LEN 256  
@@ -381,7 +382,8 @@ int main(int argc, char *argv[]) {
 
 // Function to write the latest documents section  
 void write_latest_docs(FILE *f, sqlite3 *db) {  
-    fprintf(f, "<div x-show=\"tab === 'latest'\" x-cloak>\n");  
+    // Make this tab visible by default (remove x-cloak and set as initial tab)  
+    fprintf(f, "<div x-show=\"tab === 'latest'\" x-init=\"tab = 'latest'\">\n");  
     fprintf(f, "    <h2 class=\"text-2xl font-bold mb-4 text-gray-800\">最新更新的文档</h2>\n");  
     fprintf(f, "    <div class=\"overflow-x-auto\">\n");  
     fprintf(f, "        <table class=\"min-w-full bg-white shadow-md rounded-lg overflow-hidden\">\n");  
@@ -389,25 +391,32 @@ void write_latest_docs(FILE *f, sqlite3 *db) {
     fprintf(f, "                <tr>\n");  
     fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">序号</th>\n");  
     fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档名称</th>\n");  
-    fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">作者帐号</th>\n");  
-    fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">作者姓名</th>\n");  
-    fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">书籍名称</th>\n");  
-    fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">阅读次数</th>\n");  
+    fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">作者</th>\n");  
+    fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">最后修改者</th>\n");  
     fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">更新时间</th>\n");  
     fprintf(f, "                </tr>\n");  
     fprintf(f, "            </thead>\n");  
     fprintf(f, "            <tbody class=\"divide-y divide-gray-200\">\n");  
 
-    // Query for most recently updated documents  
+    // Updated query to use md_document_history for the last modification time  
+    // First get the latest history entry for each document  
     const char *query =   
         "SELECT d.document_id, d.document_name, d.identify as doc_identify, "  
-        "d.book_id, d.member_id, d.modify_time, d.view_count, "  
-        "m.account, m.real_name, "  
-        "b.book_name, b.identify as book_identify "  
+        "d.book_id, h.modify_time, "  
+        "m1.account as author_account, m1.real_name as author_real_name, "  
+        "m2.account as modifier_account, m2.real_name as modifier_real_name, "  
+        "b.identify as book_identify "  
         "FROM md_documents d "  
-        "LEFT JOIN md_members m ON d.member_id = m.member_id "  
+        "JOIN ( "  
+        "    SELECT document_id, MAX(modify_time) as latest_time "  
+        "    FROM md_document_history "  
+        "    GROUP BY document_id "  
+        ") latest ON d.document_id = latest.document_id "  
+        "JOIN md_document_history h ON h.document_id = latest.document_id AND h.modify_time = latest.latest_time "  
+        "LEFT JOIN md_members m1 ON d.member_id = m1.member_id "  
+        "LEFT JOIN md_members m2 ON h.member_id = m2.member_id "  
         "LEFT JOIN md_books b ON d.book_id = b.book_id "  
-        "ORDER BY d.modify_time DESC "  
+        "ORDER BY h.modify_time DESC "  
         "LIMIT 100";  
 
     sqlite3_stmt *stmt;  
@@ -422,12 +431,12 @@ void write_latest_docs(FILE *f, sqlite3 *db) {
     while (sqlite3_step(stmt) == SQLITE_ROW) {  
         const char *doc_name = (const char*)sqlite3_column_text(stmt, 1);  
         const char *doc_identify = (const char*)sqlite3_column_text(stmt, 2);  
-        const char *account = (const char*)sqlite3_column_text(stmt, 7);  
-        const char *real_name = (const char*)sqlite3_column_text(stmt, 8);  
-        const char *book_name = (const char*)sqlite3_column_text(stmt, 9);  
-        const char *book_identify = (const char*)sqlite3_column_text(stmt, 10);  
-        int view_count = sqlite3_column_int(stmt, 6);  
-        const char *modify_time = (const char*)sqlite3_column_text(stmt, 5);  
+        const char *modify_time = (const char*)sqlite3_column_text(stmt, 4);  
+        const char *author_account = (const char*)sqlite3_column_text(stmt, 5);  
+        const char *author_real_name = (const char*)sqlite3_column_text(stmt, 6);  
+        const char *modifier_account = (const char*)sqlite3_column_text(stmt, 7);  
+        const char *modifier_real_name = (const char*)sqlite3_column_text(stmt, 8);  
+        const char *book_identify = (const char*)sqlite3_column_text(stmt, 9);  
 
         // Generate document link  
         char doc_link[MAX_PATH_LEN];  
@@ -436,11 +445,12 @@ void write_latest_docs(FILE *f, sqlite3 *db) {
                 book_identify ? book_identify : "",   
                 doc_identify ? doc_identify : "");  
 
-        // Ensure names aren't NULL for display  
+        // Ensure values aren't NULL for display  
         if (!doc_name) doc_name = "";  
-        if (!account) account = "";  
-        if (!real_name) real_name = "";  
-        if (!book_name) book_name = "";  
+        if (!author_account) author_account = "";  
+        if (!author_real_name) author_real_name = "";  
+        if (!modifier_account) modifier_account = "";  
+        if (!modifier_real_name) modifier_real_name = "";  
         if (!modify_time) modify_time = "";  
 
         // Display row  
@@ -449,11 +459,23 @@ void write_latest_docs(FILE *f, sqlite3 *db) {
         fprintf(f, "                    <td class=\"py-3 px-4 font-medium text-blue-600\">"  
                    "<a href=\"%s\" target=\"_blank\" class=\"hover:underline\">%s</a></td>\n",   
                    doc_link, doc_name);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", account);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-800\">%s</td>\n",   
-                    real_name[0] ? real_name : account);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", book_name);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%d</td>\n", view_count);  
+        
+        // Author information in format: account (real_name)  
+        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">");  
+        fprintf(f, "%s", author_account ? author_account : "");  
+        if (author_real_name && author_real_name[0]) {  
+            fprintf(f, " (%s)", author_real_name);  
+        }  
+        fprintf(f, "</td>\n");  
+        
+        // Last modifier information in format: account (real_name)  
+        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">");  
+        fprintf(f, "%s", modifier_account ? modifier_account : "");  
+        if (modifier_real_name && modifier_real_name[0]) {  
+            fprintf(f, " (%s)", modifier_real_name);  
+        }  
+        fprintf(f, "</td>\n");  
+        
         fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", modify_time);  
         fprintf(f, "                </tr>\n");  
     }  
@@ -516,8 +538,8 @@ void write_popular_docs_table(FILE *f, sqlite3 *db, const char *time_range) {
     fprintf(f, "                    <tr>\n");  
     fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">排名</th>\n");  
     fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档名称</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">作者帐号</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">作者姓名</th>\n");  
+    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档作者</th>\n");  
+    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">最后修改者</th>\n");  
     fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">书籍名称</th>\n");  
     fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">阅读次数</th>\n");  
     fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">更新时间</th>\n");  
@@ -527,41 +549,60 @@ void write_popular_docs_table(FILE *f, sqlite3 *db, const char *time_range) {
 
     char query[MAX_QUERY_LEN];  
     
-    // Create query based on time range  
+    // Create query based on time range with author and modifier information  
+    // Now joining with md_document_history to get the latest modification time  
     if (strcmp(time_range, "week") == 0) {  
         snprintf(query, MAX_QUERY_LEN,  
             "SELECT d.document_id, d.document_name, d.identify as doc_identify, "  
-            "d.book_id, d.member_id, d.modify_time, d.view_count, "  
-            "m.account, m.real_name, "  
+            "d.book_id, d.member_id, h.modify_time, d.view_count, h.member_id as history_member_id, "  
+            "a.account as author_account, a.real_name as author_real_name, "  
+            "m.account as modifier_account, m.real_name as modifier_real_name, "  
             "b.book_name, b.identify as book_identify "  
             "FROM md_documents d "  
-            "LEFT JOIN md_members m ON d.member_id = m.member_id "  
+            "LEFT JOIN md_members a ON d.member_id = a.member_id "  
             "LEFT JOIN md_books b ON d.book_id = b.book_id "  
-            "WHERE d.modify_time >= datetime('now', '-7 days') "  
-            "ORDER BY d.view_count DESC, d.modify_time DESC "  
+            "LEFT JOIN (SELECT document_id, modify_time, member_id FROM md_document_history "  
+            "   WHERE (document_id, modify_time) IN "  
+            "   (SELECT document_id, MAX(modify_time) FROM md_document_history GROUP BY document_id)) h "  
+            "ON d.document_id = h.document_id "  
+            "LEFT JOIN md_members m ON h.member_id = m.member_id "  
+            "WHERE h.modify_time >= datetime('now', '-7 days') "  
+            "ORDER BY d.view_count DESC, h.modify_time DESC "  
             "LIMIT 100");  
     } else if (strcmp(time_range, "month") == 0) {  
         snprintf(query, MAX_QUERY_LEN,  
             "SELECT d.document_id, d.document_name, d.identify as doc_identify, "  
-            "d.book_id, d.member_id, d.modify_time, d.view_count, "  
-            "m.account, m.real_name, "  
+            "d.book_id, d.member_id, h.modify_time, d.view_count, h.member_id as history_member_id, "  
+            "a.account as author_account, a.real_name as author_real_name, "  
+            "m.account as modifier_account, m.real_name as modifier_real_name, "  
             "b.book_name, b.identify as book_identify "  
             "FROM md_documents d "  
-            "LEFT JOIN md_members m ON d.member_id = m.member_id "  
+            "LEFT JOIN md_members a ON d.member_id = a.member_id "  
             "LEFT JOIN md_books b ON d.book_id = b.book_id "  
-            "WHERE d.modify_time >= datetime('now', '-30 days') "  
-            "ORDER BY d.view_count DESC, d.modify_time DESC "  
+            "LEFT JOIN (SELECT document_id, modify_time, member_id FROM md_document_history "  
+            "   WHERE (document_id, modify_time) IN "  
+            "   (SELECT document_id, MAX(modify_time) FROM md_document_history GROUP BY document_id)) h "  
+            "ON d.document_id = h.document_id "  
+            "LEFT JOIN md_members m ON h.member_id = m.member_id "  
+            "WHERE h.modify_time >= datetime('now', '-30 days') "  
+            "ORDER BY d.view_count DESC, h.modify_time DESC "  
             "LIMIT 100");  
     } else {  
         snprintf(query, MAX_QUERY_LEN,  
             "SELECT d.document_id, d.document_name, d.identify as doc_identify, "  
-            "d.book_id, d.member_id, d.modify_time, d.view_count, "  
-            "m.account, m.real_name, "  
+            "d.book_id, d.member_id, h.modify_time, d.view_count, h.member_id as history_member_id, "  
+            "a.account as author_account, a.real_name as author_real_name, "  
+            "m.account as modifier_account, m.real_name as modifier_real_name, "  
             "b.book_name, b.identify as book_identify "  
             "FROM md_documents d "  
-            "LEFT JOIN md_members m ON d.member_id = m.member_id "  
+            "LEFT JOIN md_members a ON d.member_id = a.member_id "  
             "LEFT JOIN md_books b ON d.book_id = b.book_id "  
-            "ORDER BY d.view_count DESC, d.modify_time DESC "  
+            "LEFT JOIN (SELECT document_id, modify_time, member_id FROM md_document_history "  
+            "   WHERE (document_id, modify_time) IN "  
+            "   (SELECT document_id, MAX(modify_time) FROM md_document_history GROUP BY document_id)) h "  
+            "ON d.document_id = h.document_id "  
+            "LEFT JOIN md_members m ON h.member_id = m.member_id "  
+            "ORDER BY d.view_count DESC, h.modify_time DESC "  
             "LIMIT 100");  
     }  
 
@@ -577,10 +618,12 @@ void write_popular_docs_table(FILE *f, sqlite3 *db, const char *time_range) {
     while (sqlite3_step(stmt) == SQLITE_ROW) {  
         const char *doc_name = (const char*)sqlite3_column_text(stmt, 1);  
         const char *doc_identify = (const char*)sqlite3_column_text(stmt, 2);  
-        const char *account = (const char*)sqlite3_column_text(stmt, 7);  
-        const char *real_name = (const char*)sqlite3_column_text(stmt, 8);  
-        const char *book_name = (const char*)sqlite3_column_text(stmt, 9);  
-        const char *book_identify = (const char*)sqlite3_column_text(stmt, 10);  
+        const char *author_account = (const char*)sqlite3_column_text(stmt, 8);  
+        const char *author_real_name = (const char*)sqlite3_column_text(stmt, 9);  
+        const char *modifier_account = (const char*)sqlite3_column_text(stmt, 10);  
+        const char *modifier_real_name = (const char*)sqlite3_column_text(stmt, 11);  
+        const char *book_name = (const char*)sqlite3_column_text(stmt, 12);  
+        const char *book_identify = (const char*)sqlite3_column_text(stmt, 13);  
         int view_count = sqlite3_column_int(stmt, 6);  
         const char *modify_time = (const char*)sqlite3_column_text(stmt, 5);  
 
@@ -591,12 +634,30 @@ void write_popular_docs_table(FILE *f, sqlite3 *db, const char *time_range) {
                 book_identify ? book_identify : "",   
                 doc_identify ? doc_identify : "");  
 
-        // Ensure names aren't NULL for display  
+        // Ensure values aren't NULL for display  
         if (!doc_name) doc_name = "";  
-        if (!account) account = "";  
-        if (!real_name) real_name = "";  
+        if (!author_account) author_account = "";  
+        if (!author_real_name) author_real_name = "";  
+        if (!modifier_account) modifier_account = author_account;  
+        if (!modifier_real_name) modifier_real_name = author_real_name;  
         if (!book_name) book_name = "";  
         if (!modify_time) modify_time = "";  
+
+        // Prepare author and modifier display strings  
+        char author_display[MAX_NAME_LEN];  
+        char modifier_display[MAX_NAME_LEN];  
+        
+        if (author_real_name && author_real_name[0]) {  
+            snprintf(author_display, MAX_NAME_LEN, "%s (%s)", author_account, author_real_name);  
+        } else {  
+            snprintf(author_display, MAX_NAME_LEN, "%s", author_account);  
+        }  
+        
+        if (modifier_real_name && modifier_real_name[0]) {  
+            snprintf(modifier_display, MAX_NAME_LEN, "%s (%s)", modifier_account, modifier_real_name);  
+        } else {  
+            snprintf(modifier_display, MAX_NAME_LEN, "%s", modifier_account);  
+        }  
 
         // Display row with rank highlighting  
         fprintf(f, "                <tr class=\"hover:bg-gray-50 %s\">\n",   
@@ -606,9 +667,8 @@ void write_popular_docs_table(FILE *f, sqlite3 *db, const char *time_range) {
         fprintf(f, "                    <td class=\"py-3 px-4 font-medium text-blue-600\">"  
                    "<a href=\"%s\" target=\"_blank\" class=\"hover:underline\">%s</a></td>\n",   
                    doc_link, doc_name);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", account);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-800\">%s</td>\n",   
-                    real_name[0] ? real_name : account);  
+        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", author_display);  
+        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", modifier_display);  
         fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", book_name);  
         fprintf(f, "                    <td class=\"py-3 px-4 font-medium %s\">%d</td>\n",   
                 rank <= 4 ? "text-amber-600" : "text-gray-500", view_count);  

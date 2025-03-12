@@ -71,17 +71,34 @@ CREATE TABLE `md_books` (
     `auto_save` integer NOT NULL DEFAULT 0 
 )
 
+CREATE TABLE `md_document_history` (
+    `history_id` integer NOT NULL PRIMARY KEY AUTOINCREMENT,
+    `action` varchar(255) NOT NULL DEFAULT '' ,
+    `action_name` varchar(255) NOT NULL DEFAULT '' ,
+    `document_id` integer NOT NULL DEFAULT 0 ,
+    `document_name` varchar(500) NOT NULL DEFAULT '' ,
+    `parent_id` integer NOT NULL DEFAULT 0 ,
+    `markdown` text,
+    `content` text,
+    `member_id` integer NOT NULL DEFAULT 0 ,
+    `modify_time` datetime NOT NULL,
+    `modify_at` integer NOT NULL DEFAULT 0 ,
+    `version` integer NOT NULL DEFAULT 0 ,
+    `is_open` integer NOT NULL DEFAULT 0 
+)
+
+
 提供以下内容
 
 1、最新更新的文档（默认打开显示的视图）
-按日期最新更新的100篇文档，文档链接，文档作者帐号，文档作者姓名, 文档最后更新时间
+按日期最新更新的100篇文档，文档链接，文档作者信息 account（real_name）, 最后修改者信息 account（real_name）  文档最后更新时间
 
 2、最受欢迎文档
-按所有时间，过去一个月，过去一周提供view_count排名的100篇文档，文档链接，文档作者帐号，文档作者姓名, 文档最后更新时间
+按所有时间，过去一个月，过去一周提供view_count排名的100篇文档，文档链接，文档作者信息 account（real_name）, 最后修改者信息 account（real_name） 文档最后更新时间
 
 3、个人文档排名
 分3部分显示，所有时间，过去一个月，过去一周
-显示 排名 帐号  姓名  文档数量   文档列表（默认折叠，点击后显示详细文档带链接） 
+显示 排名 作者 最后修改者  文档数量   文档列表（默认折叠，点击后显示详细文档带链接） 
 
 4、组内文档排名
 分2部分显示 指定配置组文档排名 和 所有组文档排名
@@ -108,5 +125,6 @@ sort_books = 支撑1组FAQ, 支撑2组FAQ, L2组FAQ, QACL组FAQ, 转发FAQ, 业�
 link_prefix = http://10.114.209.41:8181/docs
 
 生成的网页优先显示最新更新的文档，上部固定导航按钮（翻页时固定在上部）可切换成最受欢迎文档，个人文档排名，组内文档排名(按组内文档数量排名),生成的html可引用同文件夹下的tailwind.min.css文件和alpine.min.js文件，美化下界面 提供linux上纯C实现的所有源代码
+
 
 
