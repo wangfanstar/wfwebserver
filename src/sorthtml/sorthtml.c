@@ -478,6 +478,7 @@ void generate_group_rankings_html(FILE *fp, sqlite3 *db, Config *config) {
     fprintf(fp, "          <th class=\"px-4 py-2 border\">排名</th>\n");  
     fprintf(fp, "          <th class=\"px-4 py-2 border\">知识库名称</th>\n");  
     fprintf(fp, "          <th class=\"px-4 py-2 border\">文档数量</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">相关作者</th>\n");  
     fprintf(fp, "          <th class=\"px-4 py-2 border\">文档列表</th>\n");  
     fprintf(fp, "        </tr>\n");  
     fprintf(fp, "      </thead>\n");  
@@ -525,6 +526,38 @@ void generate_group_rankings_html(FILE *fp, sqlite3 *db, Config *config) {
             fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", rank++);  
             fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", book_name);  
             fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", doc_count);  
+
+            // Add author column  
+            fprintf(fp, "          <td class=\"px-4 py-2 border\">\n");  
+            
+            // SQL to get all unique authors for this book  
+            char authors_sql[MAX_SQL_LEN];  
+            snprintf(authors_sql, sizeof(authors_sql),  
+                "SELECT DISTINCT author.member_id, author.account, author.real_name "  
+                "FROM md_documents "  
+                "JOIN md_members as author ON md_documents.member_id = author.member_id "  
+                "WHERE md_documents.book_id = %d",  
+                book_id);  
+            
+            sqlite3_stmt *authors_stmt;  
+            if (sqlite3_prepare_v2(db, authors_sql, -1, &authors_stmt, NULL) == SQLITE_OK) {  
+                int author_count = 0;  
+                while (sqlite3_step(authors_stmt) == SQLITE_ROW) {  
+                    const char *author_account = (const char *)sqlite3_column_text(authors_stmt, 1);  
+                    const char *author_real_name = (const char *)sqlite3_column_text(authors_stmt, 2);  
+                    
+                    // Display author name or account  
+                    const char *author_display = (author_real_name && strlen(author_real_name) > 0) ?   
+                                                author_real_name : author_account;  
+                    
+                    if (author_count > 0) fprintf(fp, ", ");  
+                    fprintf(fp, "%s", author_display);  
+                    author_count++;  
+                }  
+                sqlite3_finalize(authors_stmt);  
+            }  
+            
+            fprintf(fp, "          </td>\n");  
             
             // Button to show document list (using Alpine.js)  
             fprintf(fp, "          <td class=\"px-4 py-2 border\">\n");  
@@ -589,6 +622,7 @@ void generate_group_rankings_html(FILE *fp, sqlite3 *db, Config *config) {
     fprintf(fp, "          <th class=\"px-4 py-2 border\">排名</th>\n");  
     fprintf(fp, "          <th class=\"px-4 py-2 border\">知识库名称</th>\n");  
     fprintf(fp, "          <th class=\"px-4 py-2 border\">文档数量</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">相关作者</th>\n");  
     fprintf(fp, "          <th class=\"px-4 py-2 border\">文档列表</th>\n");  
     fprintf(fp, "        </tr>\n");  
     fprintf(fp, "      </thead>\n");  
@@ -616,6 +650,38 @@ void generate_group_rankings_html(FILE *fp, sqlite3 *db, Config *config) {
             fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", rank++);  
             fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", book_name);  
             fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", doc_count);  
+            
+            // Add author column  
+            fprintf(fp, "          <td class=\"px-4 py-2 border\">\n");  
+            
+            // SQL to get all unique authors for this book  
+            char authors_sql[MAX_SQL_LEN];  
+            snprintf(authors_sql, sizeof(authors_sql),  
+                "SELECT DISTINCT author.member_id, author.account, author.real_name "  
+                "FROM md_documents "  
+                "JOIN md_members as author ON md_documents.member_id = author.member_id "  
+                "WHERE md_documents.book_id = %d",  
+                book_id);  
+            
+            sqlite3_stmt *authors_stmt;  
+            if (sqlite3_prepare_v2(db, authors_sql, -1, &authors_stmt, NULL) == SQLITE_OK) {  
+                int author_count = 0;  
+                while (sqlite3_step(authors_stmt) == SQLITE_ROW) {  
+                    const char *author_account = (const char *)sqlite3_column_text(authors_stmt, 1);  
+                    const char *author_real_name = (const char *)sqlite3_column_text(authors_stmt, 2);  
+                    
+                    // Display author name or account  
+                    const char *author_display = (author_real_name && strlen(author_real_name) > 0) ?   
+                                                author_real_name : author_account;  
+                    
+                    if (author_count > 0) fprintf(fp, ", ");  
+                    fprintf(fp, "%s", author_display);  
+                    author_count++;  
+                }  
+                sqlite3_finalize(authors_stmt);  
+            }  
+            
+            fprintf(fp, "          </td>\n");  
             
             // Button to show document list (using Alpine.js)  
             fprintf(fp, "          <td class=\"px-4 py-2 border\">\n");  
