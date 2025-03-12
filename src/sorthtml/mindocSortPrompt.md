@@ -88,17 +88,18 @@ CREATE TABLE `md_document_history` (
 )
 
 
+
 提供以下内容
 
 1、最新更新的文档（默认打开显示的视图）
-按日期最新更新的100篇文档，文档链接，文档作者信息 account（real_name）, 最后修改者信息 account（real_name）  文档最后更新时间
+按md_document_history.modify_time日期排序最新更新的100篇文档，文档链接，文档作者信息 account（real_name）, 最后修改者信息md_documents.modify_at account（real_name） book名称 阅读次数 文档最后更新时间md_documents.modify_time
 
 2、最受欢迎文档
-按所有时间，过去一个月，过去一周提供view_count排名的100篇文档，文档链接，文档作者信息 account（real_name）, 最后修改者信息 account（real_name） 文档最后更新时间
+按所有时间，过去一个月，过去一周提供view_count排名的100篇文档，文档链接，文档作者信息 account（real_name）, book名称，最后修改者信息md_documents.modify_at account（real_name） 文档最后更新时间
 
 3、个人文档排名
 分3部分显示，所有时间，过去一个月，过去一周
-显示 排名 作者 最后修改者  文档数量   文档列表（默认折叠，点击后显示详细文档带链接） 
+显示 排名 作者 相关修改者  文档数量   文档列表（默认折叠，点击后显示详细文档带链接） 
 
 4、组内文档排名
 分2部分显示 指定配置组文档排名 和 所有组文档排名
@@ -124,7 +125,7 @@ sort_books = 支撑1组FAQ, 支撑2组FAQ, L2组FAQ, QACL组FAQ, 转发FAQ, 业�
 # 文档链接前缀
 link_prefix = http://10.114.209.41:8181/docs
 
-生成的网页优先显示最新更新的文档，上部固定导航按钮（翻页时固定在上部）可切换成最受欢迎文档，个人文档排名，组内文档排名(按组内文档数量排名),生成的html可引用同文件夹下的tailwind.min.css文件和alpine.min.js文件，美化下界面 提供linux上纯C实现的所有源代码
+生成的网页优先显示最新更新的文档，上部固定导航按钮（翻页时固定在上部）可切换成最受欢迎文档，个人文档排名，组内文档排名(按组内文档数量排名),生成的html可引用同文件夹下的tailwind.min.css文件和alpine.min.js文件，美化下界面 提供linux上纯C实现的所有源代码, 分2次提供
 
 
 
