@@ -107,7 +107,7 @@ char *get_time_condition(const char *timeframe) {
     return condition;  
 }  
 
-// Generate HTML for latest updated documents  
+  
 // Generate HTML for latest updated documents  
 void generate_latest_documents_html(FILE *fp, sqlite3 *db, Config *config) {  
     sqlite3_stmt *stmt;  
@@ -122,7 +122,7 @@ void generate_latest_documents_html(FILE *fp, sqlite3 *db, Config *config) {
         "       author.account as author_account, author.real_name as author_real_name, "  
         "       modifier.account as modifier_account, modifier.real_name as modifier_real_name, "  
         "       md_books.book_name, md_books.identify as book_identify, "  
-        "       md_documents.modify_time "  
+        "       md_documents.view_count, md_documents.modify_time "  
         "FROM latest_history "  
         "JOIN md_documents ON latest_history.document_id = md_documents.document_id "  
         "JOIN md_members as author ON md_documents.member_id = author.member_id "  
@@ -137,10 +137,12 @@ void generate_latest_documents_html(FILE *fp, sqlite3 *db, Config *config) {
     fprintf(fp, "    <table class=\"min-w-full bg-white border border-gray-300\">\n");  
     fprintf(fp, "      <thead class=\"bg-gray-100\">\n");  
     fprintf(fp, "        <tr>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">序号</th>\n");  
     fprintf(fp, "          <th class=\"px-4 py-2 border\">文档名称</th>\n");  
     fprintf(fp, "          <th class=\"px-4 py-2 border\">作者</th>\n");  
     fprintf(fp, "          <th class=\"px-4 py-2 border\">最后修改者</th>\n");  
     fprintf(fp, "          <th class=\"px-4 py-2 border\">所属知识库</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">阅读次数</th>\n");  
     fprintf(fp, "          <th class=\"px-4 py-2 border\">最后更新时间</th>\n");  
     fprintf(fp, "        </tr>\n");  
     fprintf(fp, "      </thead>\n");  
@@ -149,6 +151,7 @@ void generate_latest_documents_html(FILE *fp, sqlite3 *db, Config *config) {
     if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {  
         fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));  
     } else {  
+        int row_num = 1;  // Counter for row numbers  
         while (sqlite3_step(stmt) == SQLITE_ROW) {  
             const char *doc_name = (const char *)sqlite3_column_text(stmt, 1);  
             const char *doc_identify = (const char *)sqlite3_column_text(stmt, 2);  
@@ -158,16 +161,13 @@ void generate_latest_documents_html(FILE *fp, sqlite3 *db, Config *config) {
             const char *modifier_real_name = (const char *)sqlite3_column_text(stmt, 6);  
             const char *book_name = (const char *)sqlite3_column_text(stmt, 7);  
             const char *book_identify = (const char *)sqlite3_column_text(stmt, 8);  
-            const char *modify_time = (const char *)sqlite3_column_text(stmt, 9);  
+            int view_count = sqlite3_column_int(stmt, 9);  
+            const char *modify_time = (const char *)sqlite3_column_text(stmt, 10);  
 
             // Format document link  
             char doc_link[CONFIG_MAX_LINE * 2];  
             snprintf(doc_link, sizeof(doc_link), "%s/%s/%s",   
                      config->link_prefix, book_identify, doc_identify);  
-
-            // Display author name or account  
-            const char *author_display = author_real_name && strlen(author_real_name) > 0 ?   
-                                         author_real_name : author_account;  
             
             // Format author display with account and real name  
             char author_info[512];  
@@ -186,11 +186,13 @@ void generate_latest_documents_html(FILE *fp, sqlite3 *db, Config *config) {
             }  
 
             fprintf(fp, "        <tr class=\"hover:bg-gray-50\">\n");  
+            fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", row_num++);  
             fprintf(fp, "          <td class=\"px-4 py-2 border\"><a href=\"%s\" class=\"text-blue-600 hover:underline\" target=\"_blank\">%s</a></td>\n",   
                    doc_link, doc_name);  
             fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", author_info);  
             fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", modifier_info);  
             fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", book_name);  
+            fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", view_count);  
             fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", modify_time);  
             fprintf(fp, "        </tr>\n");  
         }  
