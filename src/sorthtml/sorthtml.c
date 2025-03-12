@@ -4,1238 +4,761 @@
 #include <unistd.h>  
 #include <time.h>  
 #include <sqlite3.h>  
-#include <stdarg.h>  
-#include <ctype.h>  
-#include <sys/stat.h>  
 #include <stdbool.h>  
-#include <signal.h>  
 
-#define MAX_CONF_LINE 1024  
-#define MAX_PATH_LEN 1024  
-#define MAX_NAME_LEN 1024 
-#define MAX_QUERY_LEN 4096  
-#define MAX_BOOKS 100  
+#define CONFIG_MAX_LINE 1024  
+#define MAX_SORT_BOOKS 50  
 #define MAX_BOOK_NAME_LEN 256  
-#define MAX_HTML_BUFFER 10485760 // 10MB buffer  
-#define TIMESTAMP_SIZE 30  
+#define MAX_SQL_LEN 4096  
+#define DEFAULT_CONFIG_PATH "./mindocsort.conf"  
 
-// Structure to hold configuration  
 typedef struct {  
     int recycle_time;  
-    char db_path[MAX_PATH_LEN];  
-    char html_path[MAX_PATH_LEN];  
-    char link_prefix[MAX_PATH_LEN];  
-    char sort_books[MAX_BOOKS][MAX_BOOK_NAME_LEN];  
+    char db_path[CONFIG_MAX_LINE];  
+    char html_path[CONFIG_MAX_LINE];  
+    char sort_books[MAX_SORT_BOOKS][MAX_BOOK_NAME_LEN];  
     int sort_books_count;  
+    char link_prefix[CONFIG_MAX_LINE];  
 } Config;  
 
-// Structure for document data  
-typedef struct {  
-    int document_id;  
-    char document_name[512];  
-    char doc_identify[128];  
-    char book_identify[128];  
-    int book_id;  
-    int member_id;  
-    char modify_time[TIMESTAMP_SIZE];  
-    int view_count;  
-    char account[128];  
-    char real_name[256];  
-    char book_name[512];  
-} Document;  
+// Function prototypes  
+bool load_config(const char *config_path, Config *config);  
+bool generate_html(Config *config);  
+char *get_time_condition(const char *timeframe);  
+void generate_latest_documents_html(FILE *fp, sqlite3 *db, Config *config);  
+void generate_popular_documents_html(FILE *fp, sqlite3 *db, Config *config);  
+void generate_user_rankings_html(FILE *fp, sqlite3 *db, Config *config);  
+void generate_group_rankings_html(FILE *fp, sqlite3 *db, Config *config);  
 
-// Structure for author data  
-typedef struct {  
-    int member_id;  
-    char account[128];  
-    char real_name[256];  
-    int doc_count;  
-    Document *documents;  
-    int docs_allocated;  
-} Author;  
-
-// Structure for book data  
-typedef struct {  
-    int book_id;  
-    char book_name[512];  
-    char identify[128];  
-    int doc_count;  
-    Document *documents;  
-    int docs_allocated;  
-} Book;  
-
-// Global variables  
-Config config;  
-volatile sig_atomic_t keep_running = 1;  
-
-// Function declarations  
-void load_config(const char *config_path);  
-void trim(char *str);  
-void strip_quotes(char *str);  
-void generate_html_report(sqlite3 *db);  
-void signal_handler(int signum);  
-char *str_replace(const char *orig, const char *rep, const char *with);  
-
-// HTML template parts  
-void write_html_header(FILE *f);  
-void write_html_footer(FILE *f);  
-void write_latest_docs(FILE *f, sqlite3 *db);  
-void write_popular_docs(FILE *f, sqlite3 *db);  
-void write_popular_docs_table(FILE *f, sqlite3 *db, const char *time_range);
-void write_author_rankings(FILE *f, sqlite3 *db);  
-void write_book_rankings(FILE *f, sqlite3 *db);  
-void write_author_rankings_table(FILE *f, sqlite3 *db, const char *time_range);
-void write_selected_book_rankings_table(FILE *f, sqlite3 *db);
-void write_all_book_rankings_table(FILE *f, sqlite3 *db);
-char* get_current_time();
-
-// Load configuration from file  
-void load_config(const char *config_path) {  
-    FILE *f = fopen(config_path, "r");  
-    if (!f) {  
-        fprintf(stderr, "Error opening config file: %s\n", config_path);  
-        exit(EXIT_FAILURE);  
+// Config file parsing  
+bool load_config(const char *config_path, Config *config) {  
+    FILE *fp = fopen(config_path, "r");  
+    if (!fp) {  
+        fprintf(stderr, "Failed to open config file: %s\n", config_path);  
+        return false;  
     }  
 
-    // Set defaults  
-    config.recycle_time = 10;  
-    strcpy(config.db_path, "mindoc.db");  
-    strcpy(config.html_path, "mindocsort.html");  
-    strcpy(config.link_prefix, "");  
-    config.sort_books_count = 0;  
+    char line[CONFIG_MAX_LINE];  
+    config->sort_books_count = 0;  
 
-    char line[MAX_CONF_LINE];  
-    char *key, *value;  
-
-    while (fgets(line, sizeof(line), f)) {  
-        // Skip comment lines and empty lines  
-        if (line[0] == '#' || line[0] == '\n' || line[0] == '\r')  
+    while (fgets(line, sizeof(line), fp)) {  
+        // Skip comments and empty lines  
+        if (line[0] == '#' || line[0] == '\n') {  
             continue;  
+        }  
 
-        // Find '=' separator  
-        char *separator = strchr(line, '=');  
-        if (!separator)  
+        char *key = strtok(line, "=");  
+        char *value = strtok(NULL, "\n");  
+
+        if (!key || !value) {  
             continue;  
-
-        // Extract key and value  
-        *separator = '\0';  
-        key = line;  
-        value = separator + 1;  
+        }  
 
         // Trim whitespace  
-        trim(key);  
-        trim(value);  
+        while (*key && (*key == ' ' || *key == '\t')) key++;  
+        while (*value && (*value == ' ' || *value == '\t')) value++;  
 
-        // Parse configuration values  
+        char *end = key + strlen(key) - 1;  
+        while (end > key && (*end == ' ' || *end == '\t')) *end-- = '\0';  
+        
+        end = value + strlen(value) - 1;  
+        while (end > value && (*end == ' ' || *end == '\t')) *end-- = '\0';  
+
         if (strcmp(key, "recycle_time") == 0) {  
-            config.recycle_time = atoi(value);  
+            config->recycle_time = atoi(value);  
         } else if (strcmp(key, "db_path") == 0) {  
-            strncpy(config.db_path, value, MAX_PATH_LEN - 1);  
-            config.db_path[MAX_PATH_LEN - 1] = '\0';  
+            strncpy(config->db_path, value, CONFIG_MAX_LINE - 1);  
         } else if (strcmp(key, "html_path") == 0) {  
-            strncpy(config.html_path, value, MAX_PATH_LEN - 1);  
-            config.html_path[MAX_PATH_LEN - 1] = '\0';  
+            strncpy(config->html_path, value, CONFIG_MAX_LINE - 1);  
         } else if (strcmp(key, "link_prefix") == 0) {  
-            strncpy(config.link_prefix, value, MAX_PATH_LEN - 1);  
-            config.link_prefix[MAX_PATH_LEN - 1] = '\0';  
+            strncpy(config->link_prefix, value, CONFIG_MAX_LINE - 1);  
         } else if (strcmp(key, "sort_books") == 0) {  
-            // Parse comma-separated list of book names  
-            char *token = strtok(value, ",");  
-            while (token && config.sort_books_count < MAX_BOOKS) {  
-                trim(token);  
-                strip_quotes(token);  
-                strncpy(config.sort_books[config.sort_books_count], token, MAX_BOOK_NAME_LEN - 1);  
-                config.sort_books[config.sort_books_count][MAX_BOOK_NAME_LEN - 1] = '\0';  
-                config.sort_books_count++;  
-                token = strtok(NULL, ",");  
+            char *book = strtok(value, ",");  
+            while (book && config->sort_books_count < MAX_SORT_BOOKS) {  
+                // Trim whitespace  
+                while (*book && (*book == ' ' || *book == '\t')) book++;  
+                char *end = book + strlen(book) - 1;  
+                while (end > book && (*end == ' ' || *end == '\t')) *end-- = '\0';  
+                
+                strncpy(config->sort_books[config->sort_books_count], book, MAX_BOOK_NAME_LEN - 1);  
+                config->sort_books[config->sort_books_count][MAX_BOOK_NAME_LEN - 1] = '\0';  
+                config->sort_books_count++;  
+                book = strtok(NULL, ",");  
             }  
         }  
     }  
 
-    fclose(f);  
+    fclose(fp);  
+    return true;  
 }  
 
-// Trim whitespace from string  
-void trim(char *str) {  
-    if (!str || !*str)  
-        return;  
-
-    // Trim leading spaces  
-    char *p = str;  
-    while (isspace((unsigned char)*p))  
-        p++;  
-
-    if (p != str) {  
-        memmove(str, p, strlen(p) + 1);  
-    }  
-
-    // Trim trailing spaces  
-    int len = strlen(str);  
-    while (len > 0 && isspace((unsigned char)str[len - 1])) {  
-        str[--len] = '\0';  
-    }  
-}  
-
-// Remove quotes from string  
-void strip_quotes(char *str) {  
-    if (!str || !*str)  
-        return;  
-
-    int len = strlen(str);  
-    if (len >= 2 && ((str[0] == '"' && str[len-1] == '"') ||   
-                     (str[0] == '\'' && str[len-1] == '\''))) {  
-        // Shift everything one character left  
-        memmove(str, str + 1, len - 2);  
-        str[len - 2] = '\0';  
-    }  
-}  
-
-// Signal handler for graceful termination  
-void signal_handler(int signum) {  
-    keep_running = 0;  
-}  
-
-// String replacement function  
-char *str_replace(const char *orig, const char *rep, const char *with) {  
-    char *result;  
-    char *ins;  
-    char *tmp;  
-    int len_rep;  
-    int len_with;  
-    int len_front;  
-    int count;  
-
-    if (!orig || !rep)  
-        return NULL;  
+// Helper function to get the time condition for SQL queries  
+char *get_time_condition(const char *timeframe) {  
+    static char condition[256];  
     
-    len_rep = strlen(rep);  
-    if (len_rep == 0)  
-        return NULL;  
-    
-    if (!with)  
-        with = "";  
-    
-    len_with = strlen(with);  
-
-    // Count occurrences of rep in orig  
-    ins = (char *)orig;  
-    for (count = 0; (tmp = strstr(ins, rep)); ++count) {  
-        ins = tmp + len_rep;  
-    }  
-
-    // Allocate for result  
-    tmp = result = malloc(strlen(orig) + (len_with - len_rep) * count + 1);  
-    if (!result)  
-        return NULL;  
-
-    // Replace occurrences  
-    while (count--) {  
-        ins = strstr(orig, rep);  
-        len_front = ins - orig;  
-        tmp = strncpy(tmp, orig, len_front) + len_front;  
-        tmp = strcpy(tmp, with) + len_with;  
-        orig += len_front + len_rep;  
-    }  
-    strcpy(tmp, orig);  
-    
-    return result;  
-}  
-
-// Main generation function for the HTML report  
-void generate_html_report(sqlite3 *db) {  
-    FILE *html_file = fopen(config.html_path, "w");  
-    if (!html_file) {  
-        fprintf(stderr, "Error opening HTML output file: %s\n", config.html_path);  
-        return;  
-    }  
-
-    // Write HTML structure  
-    write_html_header(html_file);  
-    write_latest_docs(html_file, db);  
-    write_popular_docs(html_file, db);  
-    write_author_rankings(html_file, db);  
-    write_book_rankings(html_file, db);  
-    write_html_footer(html_file);  
-
-    fclose(html_file);  
-    printf("Generated HTML report: %s\n", config.html_path);  
-}  
-
-// 写入HTML头部并固定导航栏  
-void write_html_header(FILE *f) {  
-    fprintf(f, "<!DOCTYPE html>\n");  
-    fprintf(f, "<html lang=\"zh-CN\">\n");  
-    fprintf(f, "<head>\n");  
-    fprintf(f, "    <meta charset=\"UTF-8\">\n");  
-    fprintf(f, "    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n");  
-    fprintf(f, "    <title>MinDoc 文档统计</title>\n");  
-    fprintf(f, "    <link href=\"tailwind.min.css\" rel=\"stylesheet\">\n");  
-    fprintf(f, "    <script src=\"alpine.min.js\" defer></script>\n");  
-    fprintf(f, "    <style>\n");  
-    fprintf(f, "        [x-cloak] { display: none !important; }\n");  
-    fprintf(f, "        body { padding-top: 160px; } /* 为固定头部预留空间 */\n");  
-    fprintf(f, "        .fixed-header { background-color: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }\n");  
-    fprintf(f, "    </style>\n");  
-    fprintf(f, "</head>\n");  
-    fprintf(f, "<body class=\"bg-gray-50\">\n");  
-    
-    // Alpine.js 状态容器  
-    fprintf(f, "<div x-data=\"{ tab: 'latest' }\">\n");  
-    
-    // 固定在顶部的标题和导航栏  
-    fprintf(f, "    <div class=\"fixed top-0 left-0 right-0 fixed-header z-50 border-b border-gray-200\">\n");  
-    fprintf(f, "        <div class=\"container mx-auto px-4 py-3\">\n");  
-    fprintf(f, "            <h1 class=\"text-3xl font-bold text-center text-blue-600 mb-2\">MinDoc 文档统计</h1>\n");  
-    fprintf(f, "            <p class=\"text-center text-gray-600 mb-4\">生成时间: %s</p>\n",   
-                get_current_time());  
-    
-    // 导航部分  
-    fprintf(f, "            <nav class=\"bg-white rounded-lg p-2\">\n");  
-    fprintf(f, "                <div class=\"flex flex-wrap justify-center space-x-2 md:space-x-4\">\n");  
-    fprintf(f, "                    <button @click=\"tab = 'latest'\" :class=\"tab === 'latest' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800'\" class=\"px-4 py-2 rounded-lg transition-colors\">\n");  
-    fprintf(f, "                        最新更新文档\n");  
-    fprintf(f, "                    </button>\n");  
-    fprintf(f, "                    <button @click=\"tab = 'popular'\" :class=\"tab === 'popular' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800'\" class=\"px-4 py-2 rounded-lg transition-colors\">\n");  
-    fprintf(f, "                        最受欢迎文档\n");  
-    fprintf(f, "                    </button>\n");  
-    fprintf(f, "                    <button @click=\"tab = 'authors'\" :class=\"tab === 'authors' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800'\" class=\"px-4 py-2 rounded-lg transition-colors\">\n");  
-    fprintf(f, "                        个人文档排名\n");  
-    fprintf(f, "                    </button>\n");  
-    fprintf(f, "                    <button @click=\"tab = 'books'\" :class=\"tab === 'books' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-800'\" class=\"px-4 py-2 rounded-lg transition-colors\">\n");  
-    fprintf(f, "                        组内文档排名\n");  
-    fprintf(f, "                    </button>\n");  
-    fprintf(f, "                </div>\n");  
-    fprintf(f, "            </nav>\n");  
-    fprintf(f, "        </div>\n");  
-    fprintf(f, "    </div>\n");  
-    
-    // 主内容容器  
-    fprintf(f, "    <div class=\"container mx-auto px-4 py-3\">\n");  
-}  
-
-void write_html_footer(FILE *f) {  
-    fprintf(f, "    </div>\n"); // 关闭主内容容器  
-    fprintf(f, "</div>\n");     // 关闭 Alpine.js 状态容器  
-    fprintf(f, "</body>\n");  
-    fprintf(f, "</html>\n");  
-}  
-
-// Get current formatted time  
-char* get_current_time() {  
-    static char buffer[64];  
-    time_t now = time(NULL);  
-    struct tm *tm_info = localtime(&now);  
-    strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", tm_info);  
-    return buffer;  
-}  
-
-// Main execution function  
-int main(int argc, char *argv[]) {  
-    char config_path[MAX_PATH_LEN] = "mindocsort.conf";  
-    
-    // Check if config file path is provided  
-    if (argc > 1) {  
-        strncpy(config_path, argv[1], MAX_PATH_LEN - 1);  
-        config_path[MAX_PATH_LEN - 1] = '\0';  
+    if (strcmp(timeframe, "week") == 0) {  
+        strcpy(condition, "AND md_documents.modify_time >= datetime('now', '-7 days')");  
+    } else if (strcmp(timeframe, "month") == 0) {  
+        strcpy(condition, "AND md_documents.modify_time >= datetime('now', '-30 days')");  
+    } else {  
+        condition[0] = '\0';  // All time, no condition  
     }  
     
-    // Load configuration  
-    load_config(config_path);  
-    
-    // Set up signal handlers for graceful termination  
-    signal(SIGINT, signal_handler);  
-    signal(SIGTERM, signal_handler);  
-    
-    printf("MinDoc Statistics Generator started\n");  
-    printf("  Database: %s\n", config.db_path);  
-    printf("  HTML Output: %s\n", config.html_path);  
-    printf("  Update Interval: %d minutes\n", config.recycle_time);  
-    
-    // Main processing loop  
-    while (keep_running) {  
-        sqlite3 *db;  
-        int rc = sqlite3_open(config.db_path, &db);  
-        
-        if (rc) {  
-            fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));  
-            sqlite3_close(db);  
-            sleep(60); // Wait a minute and try again  
-            continue;  
+    return condition;  
+}  
+
+// Generate HTML for latest updated documents  
+void generate_latest_documents_html(FILE *fp, sqlite3 *db, Config *config) {  
+    sqlite3_stmt *stmt;  
+    const char *sql =   
+        "WITH latest_history AS ("  
+        "    SELECT document_id, MAX(modify_time) as latest_time"  
+        "    FROM md_document_history"  
+        "    GROUP BY document_id"  
+        ")"  
+        "SELECT md_documents.document_id, md_documents.document_name, "  
+        "       md_documents.identify as doc_identify, "  
+        "       author.account as author_account, author.real_name as author_real_name, "  
+        "       modifier.account as modifier_account, modifier.real_name as modifier_real_name, "  
+        "       md_books.book_name, md_books.identify as book_identify, "  
+        "       md_documents.modify_time "  
+        "FROM latest_history "  
+        "JOIN md_documents ON latest_history.document_id = md_documents.document_id "  
+        "JOIN md_members as author ON md_documents.member_id = author.member_id "  
+        "JOIN md_members as modifier ON md_documents.modify_at = modifier.member_id "  
+        "JOIN md_books ON md_documents.book_id = md_books.book_id "  
+        "ORDER BY latest_history.latest_time DESC "  
+        "LIMIT 100";  
+
+    fprintf(fp, "<div x-show=\"currentView === 'latest'\" class=\"w-full\">\n");  
+    fprintf(fp, "  <h2 class=\"text-2xl font-bold mb-4\">最新更新的文档</h2>\n");  
+    fprintf(fp, "  <div class=\"overflow-x-auto\">\n");  
+    fprintf(fp, "    <table class=\"min-w-full bg-white border border-gray-300\">\n");  
+    fprintf(fp, "      <thead class=\"bg-gray-100\">\n");  
+    fprintf(fp, "        <tr>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">文档名称</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">作者</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">最后修改者</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">所属知识库</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">最后更新时间</th>\n");  
+    fprintf(fp, "        </tr>\n");  
+    fprintf(fp, "      </thead>\n");  
+    fprintf(fp, "      <tbody>\n");  
+
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {  
+        fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));  
+    } else {  
+        while (sqlite3_step(stmt) == SQLITE_ROW) {  
+            const char *doc_name = (const char *)sqlite3_column_text(stmt, 1);  
+            const char *doc_identify = (const char *)sqlite3_column_text(stmt, 2);  
+            const char *author_account = (const char *)sqlite3_column_text(stmt, 3);  
+            const char *author_real_name = (const char *)sqlite3_column_text(stmt, 4);  
+            const char *modifier_account = (const char *)sqlite3_column_text(stmt, 5);  
+            const char *modifier_real_name = (const char *)sqlite3_column_text(stmt, 6);  
+            const char *book_name = (const char *)sqlite3_column_text(stmt, 7);  
+            const char *book_identify = (const char *)sqlite3_column_text(stmt, 8);  
+            const char *modify_time = (const char *)sqlite3_column_text(stmt, 9);  
+
+            // Format document link  
+            char doc_link[CONFIG_MAX_LINE * 2];  
+            snprintf(doc_link, sizeof(doc_link), "%s/%s/%s",   
+                     config->link_prefix, book_identify, doc_identify);  
+
+            // Display author name or account  
+            const char *author_display = author_real_name && strlen(author_real_name) > 0 ?   
+                                         author_real_name : author_account;  
+            
+            // Format author display with account and real name  
+            char author_info[512];  
+            if (author_real_name && strlen(author_real_name) > 0) {  
+                snprintf(author_info, sizeof(author_info), "%s（%s）", author_account, author_real_name);  
+            } else {  
+                snprintf(author_info, sizeof(author_info), "%s", author_account);  
+            }  
+            
+            // Format modifier display with account and real name  
+            char modifier_info[512];  
+            if (modifier_real_name && strlen(modifier_real_name) > 0) {  
+                snprintf(modifier_info, sizeof(modifier_info), "%s（%s）", modifier_account, modifier_real_name);  
+            } else {  
+                snprintf(modifier_info, sizeof(modifier_info), "%s", modifier_account);  
+            }  
+
+            fprintf(fp, "        <tr class=\"hover:bg-gray-50\">\n");  
+            fprintf(fp, "          <td class=\"px-4 py-2 border\"><a href=\"%s\" class=\"text-blue-600 hover:underline\" target=\"_blank\">%s</a></td>\n",   
+                   doc_link, doc_name);  
+            fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", author_info);  
+            fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", modifier_info);  
+            fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", book_name);  
+            fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", modify_time);  
+            fprintf(fp, "        </tr>\n");  
         }  
-        
-        // Generate the HTML report  
-        generate_html_report(db);  
-        
-        // Close database  
-        sqlite3_close(db);  
+        sqlite3_finalize(stmt);  
+    }  
+
+    fprintf(fp, "      </tbody>\n");  
+    fprintf(fp, "    </table>\n");  
+    fprintf(fp, "  </div>\n");  
+    fprintf(fp, "</div>\n");  
+}  
+
+// Main function  
+int main(int argc, char *argv[]) {  
+    Config config;  
+    const char *config_path = (argc > 1) ? argv[1] : DEFAULT_CONFIG_PATH;  
+    
+    if (!load_config(config_path, &config)) {  
+        fprintf(stderr, "Failed to load configuration.\n");  
+        return 1;  
+    }  
+    
+    printf("Configuration loaded. Starting document ranking generator...\n");  
+    printf("Database path: %s\n", config.db_path);  
+    printf("HTML output path: %s\n", config.html_path);  
+    printf("Update cycle: %d minutes\n", config.recycle_time);  
+    
+    // Main loop for periodic updates  
+    while (1) {  
+        printf("Generating HTML...\n");  
+        if (generate_html(&config)) {  
+            printf("HTML generated successfully at %s\n", config.html_path);  
+        } else {  
+            fprintf(stderr, "Failed to generate HTML.\n");  
+        }  
         
         // Sleep until next update  
-        printf("Next update in %d minutes\n", config.recycle_time);  
-        for (int i = 0; i < config.recycle_time && keep_running; i++) {  
-            sleep(60);  
-        }  
+        sleep(config.recycle_time * 60);  
     }  
     
-    printf("MinDoc Statistics Generator stopped\n");  
     return 0;  
 }  
 
-// Function to write the latest documents section  
-void write_latest_docs(FILE *f, sqlite3 *db) {  
-    // Make this tab visible by default (remove x-cloak and set as initial tab)  
-    fprintf(f, "<div x-show=\"tab === 'latest'\" x-init=\"tab = 'latest'\">\n");  
-    fprintf(f, "    <h2 class=\"text-2xl font-bold mb-4 text-gray-800\">最新更新的文档</h2>\n");  
-    fprintf(f, "    <div class=\"overflow-x-auto\">\n");  
-    fprintf(f, "        <table class=\"min-w-full bg-white shadow-md rounded-lg overflow-hidden\">\n");  
-    fprintf(f, "            <thead class=\"bg-gray-100\">\n");  
-    fprintf(f, "                <tr>\n");  
-    fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">序号</th>\n");  
-    fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档名称</th>\n");  
-    fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">作者</th>\n");  
-    fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">最后修改者</th>\n");  
-    fprintf(f, "                    <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">更新时间</th>\n");  
-    fprintf(f, "                </tr>\n");  
-    fprintf(f, "            </thead>\n");  
-    fprintf(f, "            <tbody class=\"divide-y divide-gray-200\">\n");  
+// Generate HTML for popular documents  
+void generate_popular_documents_html(FILE *fp, sqlite3 *db, Config *config) {  
+    fprintf(fp, "<div x-show=\"currentView === 'popular'\" class=\"w-full\">\n");  
+    fprintf(fp, "  <h2 class=\"text-2xl font-bold mb-4\">最受欢迎文档</h2>\n");  
+    fprintf(fp, "  <div class=\"mb-4\">\n");  
+    fprintf(fp, "    <button @click=\"popularTimeframe = 'all'\" :class=\"popularTimeframe === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg mr-2\">所有时间</button>\n");  
+    fprintf(fp, "    <button @click=\"popularTimeframe = 'month'\" :class=\"popularTimeframe === 'month' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg mr-2\">过去一个月</button>\n");  
+    fprintf(fp, "    <button @click=\"popularTimeframe = 'week'\" :class=\"popularTimeframe === 'week' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg\">过去一周</button>\n");  
+    fprintf(fp, "  </div>\n");  
 
-    // Updated query to use md_document_history for the last modification time  
-    // First get the latest history entry for each document  
-    const char *query =   
-        "SELECT d.document_id, d.document_name, d.identify as doc_identify, "  
-        "d.book_id, h.modify_time, "  
-        "m1.account as author_account, m1.real_name as author_real_name, "  
-        "m2.account as modifier_account, m2.real_name as modifier_real_name, "  
-        "b.identify as book_identify "  
-        "FROM md_documents d "  
-        "JOIN ( "  
-        "    SELECT document_id, MAX(modify_time) as latest_time "  
-        "    FROM md_document_history "  
-        "    GROUP BY document_id "  
-        ") latest ON d.document_id = latest.document_id "  
-        "JOIN md_document_history h ON h.document_id = latest.document_id AND h.modify_time = latest.latest_time "  
-        "LEFT JOIN md_members m1 ON d.member_id = m1.member_id "  
-        "LEFT JOIN md_members m2 ON h.member_id = m2.member_id "  
-        "LEFT JOIN md_books b ON d.book_id = b.book_id "  
-        "ORDER BY h.modify_time DESC "  
-        "LIMIT 100";  
+    // Generate tables for each timeframe (all, month, week)  
+    const char *timeframes[] = {"all", "month", "week"};  
+    for (int i = 0; i < 3; i++) {  
+        const char *timeframe = timeframes[i];  
+        char sql[MAX_SQL_LEN];  
+        snprintf(sql, sizeof(sql),  
+            "SELECT md_documents.document_id, md_documents.document_name, "  
+            "       md_documents.identify as doc_identify, "  
+            "       author.account as author_account, author.real_name as author_real_name, "  
+            "       modifier.account as modifier_account, modifier.real_name as modifier_real_name, "  
+            "       md_books.book_name, md_books.identify as book_identify, "  
+            "       md_documents.view_count, md_documents.modify_time "  
+            "FROM md_documents "  
+            "JOIN md_members as author ON md_documents.member_id = author.member_id "  
+            "JOIN md_members as modifier ON md_documents.modify_at = modifier.member_id "  
+            "JOIN md_books ON md_documents.book_id = md_books.book_id "  
+            "%s "  // Time condition will be inserted here  
+            "ORDER BY md_documents.view_count DESC "  
+            "LIMIT 100",   
+            get_time_condition(timeframe));  
+
+        fprintf(fp, "  <div x-show=\"popularTimeframe === '%s'\" class=\"overflow-x-auto\">\n", timeframe);  
+        fprintf(fp, "    <table class=\"min-w-full bg-white border border-gray-300\">\n");  
+        fprintf(fp, "      <thead class=\"bg-gray-100\">\n");  
+        fprintf(fp, "        <tr>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">排名</th>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">文档名称</th>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">作者</th>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">最后修改者</th>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">所属知识库</th>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">阅读次数</th>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">最后更新时间</th>\n");  
+        fprintf(fp, "        </tr>\n");  
+        fprintf(fp, "      </thead>\n");  
+        fprintf(fp, "      <tbody>\n");  
+
+        sqlite3_stmt *stmt;  
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {  
+            fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));  
+        } else {  
+            int rank = 1;  
+            while (sqlite3_step(stmt) == SQLITE_ROW) {  
+                const char *doc_name = (const char *)sqlite3_column_text(stmt, 1);  
+                const char *doc_identify = (const char *)sqlite3_column_text(stmt, 2);  
+                const char *author_account = (const char *)sqlite3_column_text(stmt, 3);  
+                const char *author_real_name = (const char *)sqlite3_column_text(stmt, 4);  
+                const char *modifier_account = (const char *)sqlite3_column_text(stmt, 5);  
+                const char *modifier_real_name = (const char *)sqlite3_column_text(stmt, 6);  
+                const char *book_name = (const char *)sqlite3_column_text(stmt, 7);  
+                const char *book_identify = (const char *)sqlite3_column_text(stmt, 8);  
+                int view_count = sqlite3_column_int(stmt, 9);  
+                const char *modify_time = (const char *)sqlite3_column_text(stmt, 10);  
+
+                // Format document link  
+                char doc_link[CONFIG_MAX_LINE * 2];  
+                snprintf(doc_link, sizeof(doc_link), "%s/%s/%s",   
+                         config->link_prefix, book_identify, doc_identify);  
+
+                // Display author name or account  
+                const char *author_display = author_real_name && strlen(author_real_name) > 0 ?   
+                                             author_real_name : author_account;  
+                
+                // Display modifier name or account  
+                const char *modifier_display = modifier_real_name && strlen(modifier_real_name) > 0 ?   
+                                               modifier_real_name : modifier_account;  
+
+                fprintf(fp, "        <tr class=\"hover:bg-gray-50\">\n");  
+                fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", rank++);  
+                fprintf(fp, "          <td class=\"px-4 py-2 border\"><a href=\"%s\" class=\"text-blue-600 hover:underline\" target=\"_blank\">%s</a></td>\n",   
+                       doc_link, doc_name);  
+                fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", author_display);  
+                fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", modifier_display);  
+                fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", book_name);  
+                fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", view_count);  
+                fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", modify_time);  
+                fprintf(fp, "        </tr>\n");  
+            }  
+            sqlite3_finalize(stmt);  
+        }  
+
+        fprintf(fp, "      </tbody>\n");  
+        fprintf(fp, "    </table>\n");  
+        fprintf(fp, "  </div>\n");  
+    }  
+    
+    fprintf(fp, "</div>\n");  
+}  
+
+// Generate HTML for user document rankings  
+void generate_user_rankings_html(FILE *fp, sqlite3 *db, Config *config) {  
+    fprintf(fp, "<div x-show=\"currentView === 'user'\" class=\"w-full\">\n");  
+    fprintf(fp, "  <h2 class=\"text-2xl font-bold mb-4\">个人文档排名</h2>\n");  
+    fprintf(fp, "  <div class=\"mb-4\">\n");  
+    fprintf(fp, "    <button @click=\"userTimeframe = 'all'\" :class=\"userTimeframe === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg mr-2\">所有时间</button>\n");  
+    fprintf(fp, "    <button @click=\"userTimeframe = 'month'\" :class=\"userTimeframe === 'month' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg mr-2\">过去一个月</button>\n");  
+    fprintf(fp, "    <button @click=\"userTimeframe = 'week'\" :class=\"userTimeframe === 'week' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg\">过去一周</button>\n");  
+    fprintf(fp, "  </div>\n");  
+
+    // Generate tables for each timeframe (all, month, week)  
+    const char *timeframes[] = {"all", "month", "week"};  
+    for (int i = 0; i < 3; i++) {  
+        const char *timeframe = timeframes[i];  
+        char sql[MAX_SQL_LEN];  
+        
+        // Query to get authors and their document counts  
+        snprintf(sql, sizeof(sql),  
+            "SELECT author.member_id, author.account, author.real_name, "  
+            "       COUNT(DISTINCT md_documents.document_id) as doc_count, "  
+            "       GROUP_CONCAT(DISTINCT modifier.account) as modifier_accounts, "  
+            "       GROUP_CONCAT(DISTINCT modifier.real_name) as modifier_real_names "  
+            "FROM md_documents "  
+            "JOIN md_members as author ON md_documents.member_id = author.member_id "  
+            "JOIN md_members as modifier ON md_documents.modify_at = modifier.member_id "  
+            "%s "  // Time condition will be inserted here  
+            "GROUP BY author.member_id "  
+            "ORDER BY doc_count DESC",   
+            get_time_condition(timeframe));  
+
+        fprintf(fp, "  <div x-show=\"userTimeframe === '%s'\" class=\"overflow-x-auto\">\n", timeframe);  
+        fprintf(fp, "    <table class=\"min-w-full bg-white border border-gray-300\">\n");  
+        fprintf(fp, "      <thead class=\"bg-gray-100\">\n");  
+        fprintf(fp, "        <tr>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">排名</th>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">作者</th>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">最后修改者</th>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">文档数量</th>\n");  
+        fprintf(fp, "          <th class=\"px-4 py-2 border\">文档列表</th>\n");  
+        fprintf(fp, "        </tr>\n");  
+        fprintf(fp, "      </thead>\n");  
+        fprintf(fp, "      <tbody>\n");  
+
+        sqlite3_stmt *stmt;  
+        if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) {  
+            fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));  
+        } else {  
+            int rank = 1;  
+            while (sqlite3_step(stmt) == SQLITE_ROW) {  
+                int author_id = sqlite3_column_int(stmt, 0);  
+                const char *author_account = (const char *)sqlite3_column_text(stmt, 1);  
+                const char *author_real_name = (const char *)sqlite3_column_text(stmt, 2);  
+                int doc_count = sqlite3_column_int(stmt, 3);  
+                
+                // Display author name or account  
+                const char *author_display = author_real_name && strlen(author_real_name) > 0 ?   
+                                             author_real_name : author_account;  
+                
+                // Get unique modifiers  
+                const char *modifier_accounts = (const char *)sqlite3_column_text(stmt, 4);  
+                const char *modifier_real_names = (const char *)sqlite3_column_text(stmt, 5);  
+                
+                char modifiers_display[1024] = "";  
+                if (modifier_accounts && modifier_real_names) {  
+                    // This is simplified - in a real implementation, you might want to  
+                    // parse these concatenated lists and match accounts with real names  
+                    strncpy(modifiers_display, modifier_real_names[0] ? modifier_real_names : modifier_accounts, 1023);  
+                }  
+
+                fprintf(fp, "        <tr class=\"hover:bg-gray-50\">\n");  
+                fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", rank++);  
+                fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", author_display);  
+                fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", modifiers_display);  
+                fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", doc_count);  
+                
+                // Button to show document list (using Alpine.js)  
+                fprintf(fp, "          <td class=\"px-4 py-2 border\">\n");  
+                fprintf(fp, "            <div x-data=\"{open: false}\">\n");  
+                fprintf(fp, "              <button @click=\"open = !open\" class=\"bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded\">\n");  
+                fprintf(fp, "                <span x-text=\"open ? '隐藏' : '查看'\"></span>\n");  
+                fprintf(fp, "              </button>\n");  
+                fprintf(fp, "              <div x-show=\"open\" class=\"mt-2\">\n");  
+                
+                // Get documents for this author  
+                char doc_sql[MAX_SQL_LEN];  
+                snprintf(doc_sql, sizeof(doc_sql),  
+                    "SELECT md_documents.document_name, md_documents.identify as doc_identify, "  
+                    "       md_books.book_name, md_books.identify as book_identify "  
+                    "FROM md_documents "  
+                    "JOIN md_books ON md_documents.book_id = md_books.book_id "  
+                    "WHERE md_documents.member_id = %d %s "  
+                    "ORDER BY md_documents.modify_time DESC",  
+                    author_id, get_time_condition(timeframe));  
+                
+                sqlite3_stmt *doc_stmt;  
+                if (sqlite3_prepare_v2(db, doc_sql, -1, &doc_stmt, NULL) == SQLITE_OK) {  
+                    fprintf(fp, "                <ul class=\"list-disc pl-5\">\n");  
+                    while (sqlite3_step(doc_stmt) == SQLITE_ROW) {  
+                        const char *doc_name = (const char *)sqlite3_column_text(doc_stmt, 0);  
+                        const char *doc_identify = (const char *)sqlite3_column_text(doc_stmt, 1);  
+                        const char *book_name = (const char *)sqlite3_column_text(doc_stmt, 2);  
+                        const char *book_identify = (const char *)sqlite3_column_text(doc_stmt, 3);  
+                        
+                        char doc_link[CONFIG_MAX_LINE * 2];  
+                        snprintf(doc_link, sizeof(doc_link), "%s/%s/%s",   
+                                 config->link_prefix, book_identify, doc_identify);  
+                        
+                        fprintf(fp, "                  <li><a href=\"%s\" class=\"text-blue-600 hover:underline\" target=\"_blank\">%s</a> [%s]</li>\n",   
+                               doc_link, doc_name, book_name);  
+                    }  
+                    fprintf(fp, "                </ul>\n");  
+                    sqlite3_finalize(doc_stmt);  
+                }  
+                
+                fprintf(fp, "              </div>\n");  
+                fprintf(fp, "            </div>\n");  
+                fprintf(fp, "          </td>\n");  
+                fprintf(fp, "        </tr>\n");  
+            }  
+            sqlite3_finalize(stmt);  
+        }  
+
+        fprintf(fp, "      </tbody>\n");  
+        fprintf(fp, "    </table>\n");  
+        fprintf(fp, "  </div>\n");  
+    }  
+    
+    fprintf(fp, "</div>\n");  
+}  
+
+// Generate HTML for group document rankings  
+void generate_group_rankings_html(FILE *fp, sqlite3 *db, Config *config) {  
+    fprintf(fp, "<div x-show=\"currentView === 'group'\" class=\"w-full\">\n");  
+    fprintf(fp, "  <h2 class=\"text-2xl font-bold mb-4\">组内文档排名</h2>\n");  
+    fprintf(fp, "  <div class=\"mb-4\">\n");  
+    fprintf(fp, "    <button @click=\"groupType = 'specified'\" :class=\"groupType === 'specified' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg mr-2\">指定配置组文档排名</button>\n");  
+    fprintf(fp, "    <button @click=\"groupType = 'all'\" :class=\"groupType === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg\">所有组文档排名</button>\n");  
+    fprintf(fp, "  </div>\n");  
+
+    // Generate specified groups ranking  
+    fprintf(fp, "  <div x-show=\"groupType === 'specified'\" class=\"overflow-x-auto\">\n");  
+    fprintf(fp, "    <table class=\"min-w-full bg-white border border-gray-300\">\n");  
+    fprintf(fp, "      <thead class=\"bg-gray-100\">\n");  
+    fprintf(fp, "        <tr>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">排名</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">知识库名称</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">文档数量</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">文档列表</th>\n");  
+    fprintf(fp, "        </tr>\n");  
+    fprintf(fp, "      </thead>\n");  
+    fprintf(fp, "      <tbody>\n");  
+
+    // Build a SQL query for specified books  
+    char specified_books_sql[MAX_SQL_LEN] =   
+        "SELECT md_books.book_id, md_books.book_name, md_books.identify, "  
+        "       COUNT(md_documents.document_id) as doc_count "  
+        "FROM md_books "  
+        "LEFT JOIN md_documents ON md_books.book_id = md_documents.book_id "  
+        "WHERE md_books.book_name IN (";  
+    
+    for (int i = 0; i < config->sort_books_count; i++) {  
+        char escaped_name[MAX_BOOK_NAME_LEN * 2];  
+        // Simple escaping for single quotes in SQL  
+        char *s = config->sort_books[i];  
+        char *d = escaped_name;  
+        while (*s) {  
+            if (*s == '\'') *d++ = '\'';  // Double single quotes for SQL  
+            *d++ = *s++;  
+        }  
+        *d = '\0';  
+        
+        if (i > 0) strcat(specified_books_sql, ", ");  
+        strcat(specified_books_sql, "'");  
+        strcat(specified_books_sql, escaped_name);  
+        strcat(specified_books_sql, "'");  
+    }  
+    
+    strcat(specified_books_sql, ") GROUP BY md_books.book_id ORDER BY doc_count DESC");  
 
     sqlite3_stmt *stmt;  
-    int rc = sqlite3_prepare_v2(db, query, -1, &stmt, NULL);  
-    
-    if (rc != SQLITE_OK) {  
+    if (sqlite3_prepare_v2(db, specified_books_sql, -1, &stmt, NULL) != SQLITE_OK) {  
         fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));  
-        return;  
-    }  
-
-    int count = 1;  
-    while (sqlite3_step(stmt) == SQLITE_ROW) {  
-        const char *doc_name = (const char*)sqlite3_column_text(stmt, 1);  
-        const char *doc_identify = (const char*)sqlite3_column_text(stmt, 2);  
-        const char *modify_time = (const char*)sqlite3_column_text(stmt, 4);  
-        const char *author_account = (const char*)sqlite3_column_text(stmt, 5);  
-        const char *author_real_name = (const char*)sqlite3_column_text(stmt, 6);  
-        const char *modifier_account = (const char*)sqlite3_column_text(stmt, 7);  
-        const char *modifier_real_name = (const char*)sqlite3_column_text(stmt, 8);  
-        const char *book_identify = (const char*)sqlite3_column_text(stmt, 9);  
-
-        // Generate document link  
-        char doc_link[MAX_PATH_LEN];  
-        snprintf(doc_link, MAX_PATH_LEN, "%s/%s/%s",   
-                config.link_prefix,   
-                book_identify ? book_identify : "",   
-                doc_identify ? doc_identify : "");  
-
-        // Ensure values aren't NULL for display  
-        if (!doc_name) doc_name = "";  
-        if (!author_account) author_account = "";  
-        if (!author_real_name) author_real_name = "";  
-        if (!modifier_account) modifier_account = "";  
-        if (!modifier_real_name) modifier_real_name = "";  
-        if (!modify_time) modify_time = "";  
-
-        // Display row  
-        fprintf(f, "                <tr class=\"hover:bg-gray-50\">\n");  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%d</td>\n", count++);  
-        fprintf(f, "                    <td class=\"py-3 px-4 font-medium text-blue-600\">"  
-                   "<a href=\"%s\" target=\"_blank\" class=\"hover:underline\">%s</a></td>\n",   
-                   doc_link, doc_name);  
-        
-        // Author information in format: account (real_name)  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">");  
-        fprintf(f, "%s", author_account ? author_account : "");  
-        if (author_real_name && author_real_name[0]) {  
-            fprintf(f, " (%s)", author_real_name);  
-        }  
-        fprintf(f, "</td>\n");  
-        
-        // Last modifier information in format: account (real_name)  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">");  
-        fprintf(f, "%s", modifier_account ? modifier_account : "");  
-        if (modifier_real_name && modifier_real_name[0]) {  
-            fprintf(f, " (%s)", modifier_real_name);  
-        }  
-        fprintf(f, "</td>\n");  
-        
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", modify_time);  
-        fprintf(f, "                </tr>\n");  
-    }  
-
-    sqlite3_finalize(stmt);  
-    
-    fprintf(f, "            </tbody>\n");  
-    fprintf(f, "        </table>\n");  
-    fprintf(f, "    </div>\n");  
-    fprintf(f, "</div>\n");  
-}  
-
-// Function to write the popular documents section  
-void write_popular_docs(FILE *f, sqlite3 *db) {  
-    fprintf(f, "<div x-show=\"tab === 'popular'\" x-cloak>\n");  
-    fprintf(f, "    <div x-data=\"{ timeRange: 'all' }\">\n");  
-    
-    // Time range selector  
-    fprintf(f, "        <div class=\"mb-6 flex justify-center\">\n");  
-    fprintf(f, "            <div class=\"bg-white rounded-lg shadow-md p-1 inline-flex space-x-1\">\n");  
-    fprintf(f, "                <button @click=\"timeRange = 'all'\" :class=\"timeRange === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'\" class=\"px-4 py-2 rounded-md transition-colors\">\n");  
-    fprintf(f, "                    所有时间\n");  
-    fprintf(f, "                </button>\n");  
-    fprintf(f, "                <button @click=\"timeRange = 'month'\" :class=\"timeRange === 'month' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'\" class=\"px-4 py-2 rounded-md transition-colors\">\n");  
-    fprintf(f, "                    过去一个月\n");  
-    fprintf(f, "                </button>\n");  
-    fprintf(f, "                <button @click=\"timeRange = 'week'\" :class=\"timeRange === 'week' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'\" class=\"px-4 py-2 rounded-md transition-colors\">\n");  
-    fprintf(f, "                    过去一周\n");  
-    fprintf(f, "                </button>\n");  
-    fprintf(f, "            </div>\n");  
-    fprintf(f, "        </div>\n");  
-
-    // All time popular documents  
-    fprintf(f, "        <div x-show=\"timeRange === 'all'\">\n");  
-    fprintf(f, "            <h2 class=\"text-2xl font-bold mb-4 text-gray-800\">最受欢迎文档 (所有时间)</h2>\n");  
-    write_popular_docs_table(f, db, "all");  
-    fprintf(f, "        </div>\n");  
-
-    // Past month popular documents  
-    fprintf(f, "        <div x-show=\"timeRange === 'month'\" x-cloak>\n");  
-    fprintf(f, "            <h2 class=\"text-2xl font-bold mb-4 text-gray-800\">最受欢迎文档 (过去一个月)</h2>\n");  
-    write_popular_docs_table(f, db, "month");  
-    fprintf(f, "        </div>\n");  
-
-    // Past week popular documents  
-    fprintf(f, "        <div x-show=\"timeRange === 'week'\" x-cloak>\n");  
-    fprintf(f, "            <h2 class=\"text-2xl font-bold mb-4 text-gray-800\">最受欢迎文档 (过去一周)</h2>\n");  
-    write_popular_docs_table(f, db, "week");  
-    fprintf(f, "        </div>\n");  
-
-    fprintf(f, "    </div>\n");  
-    fprintf(f, "</div>\n");  
-}  
-
-// Helper function to write popular documents table with time filters  
-void write_popular_docs_table(FILE *f, sqlite3 *db, const char *time_range) {  
-    fprintf(f, "        <div class=\"overflow-x-auto\">\n");  
-    fprintf(f, "            <table class=\"min-w-full bg-white shadow-md rounded-lg overflow-hidden\">\n");  
-    fprintf(f, "                <thead class=\"bg-gray-100\">\n");  
-    fprintf(f, "                    <tr>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">排名</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档名称</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档作者</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">最后修改者</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">书籍名称</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">阅读次数</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">更新时间</th>\n");  
-    fprintf(f, "                    </tr>\n");  
-    fprintf(f, "                </thead>\n");  
-    fprintf(f, "                <tbody class=\"divide-y divide-gray-200\">\n");  
-
-    char query[MAX_QUERY_LEN];  
-    
-    // Create query based on time range with author and modifier information  
-    // Now joining with md_document_history to get the latest modification time  
-    if (strcmp(time_range, "week") == 0) {  
-        snprintf(query, MAX_QUERY_LEN,  
-            "SELECT d.document_id, d.document_name, d.identify as doc_identify, "  
-            "d.book_id, d.member_id, h.modify_time, d.view_count, h.member_id as history_member_id, "  
-            "a.account as author_account, a.real_name as author_real_name, "  
-            "m.account as modifier_account, m.real_name as modifier_real_name, "  
-            "b.book_name, b.identify as book_identify "  
-            "FROM md_documents d "  
-            "LEFT JOIN md_members a ON d.member_id = a.member_id "  
-            "LEFT JOIN md_books b ON d.book_id = b.book_id "  
-            "LEFT JOIN (SELECT document_id, modify_time, member_id FROM md_document_history "  
-            "   WHERE (document_id, modify_time) IN "  
-            "   (SELECT document_id, MAX(modify_time) FROM md_document_history GROUP BY document_id)) h "  
-            "ON d.document_id = h.document_id "  
-            "LEFT JOIN md_members m ON h.member_id = m.member_id "  
-            "WHERE h.modify_time >= datetime('now', '-7 days') "  
-            "ORDER BY d.view_count DESC, h.modify_time DESC "  
-            "LIMIT 100");  
-    } else if (strcmp(time_range, "month") == 0) {  
-        snprintf(query, MAX_QUERY_LEN,  
-            "SELECT d.document_id, d.document_name, d.identify as doc_identify, "  
-            "d.book_id, d.member_id, h.modify_time, d.view_count, h.member_id as history_member_id, "  
-            "a.account as author_account, a.real_name as author_real_name, "  
-            "m.account as modifier_account, m.real_name as modifier_real_name, "  
-            "b.book_name, b.identify as book_identify "  
-            "FROM md_documents d "  
-            "LEFT JOIN md_members a ON d.member_id = a.member_id "  
-            "LEFT JOIN md_books b ON d.book_id = b.book_id "  
-            "LEFT JOIN (SELECT document_id, modify_time, member_id FROM md_document_history "  
-            "   WHERE (document_id, modify_time) IN "  
-            "   (SELECT document_id, MAX(modify_time) FROM md_document_history GROUP BY document_id)) h "  
-            "ON d.document_id = h.document_id "  
-            "LEFT JOIN md_members m ON h.member_id = m.member_id "  
-            "WHERE h.modify_time >= datetime('now', '-30 days') "  
-            "ORDER BY d.view_count DESC, h.modify_time DESC "  
-            "LIMIT 100");  
     } else {  
-        snprintf(query, MAX_QUERY_LEN,  
-            "SELECT d.document_id, d.document_name, d.identify as doc_identify, "  
-            "d.book_id, d.member_id, h.modify_time, d.view_count, h.member_id as history_member_id, "  
-            "a.account as author_account, a.real_name as author_real_name, "  
-            "m.account as modifier_account, m.real_name as modifier_real_name, "  
-            "b.book_name, b.identify as book_identify "  
-            "FROM md_documents d "  
-            "LEFT JOIN md_members a ON d.member_id = a.member_id "  
-            "LEFT JOIN md_books b ON d.book_id = b.book_id "  
-            "LEFT JOIN (SELECT document_id, modify_time, member_id FROM md_document_history "  
-            "   WHERE (document_id, modify_time) IN "  
-            "   (SELECT document_id, MAX(modify_time) FROM md_document_history GROUP BY document_id)) h "  
-            "ON d.document_id = h.document_id "  
-            "LEFT JOIN md_members m ON h.member_id = m.member_id "  
-            "ORDER BY d.view_count DESC, h.modify_time DESC "  
-            "LIMIT 100");  
+        int rank = 1;  
+        while (sqlite3_step(stmt) == SQLITE_ROW) {  
+            int book_id = sqlite3_column_int(stmt, 0);  
+            const char *book_name = (const char *)sqlite3_column_text(stmt, 1);  
+            const char *book_identify = (const char *)sqlite3_column_text(stmt, 2);  
+            int doc_count = sqlite3_column_int(stmt, 3);  
+
+            fprintf(fp, "        <tr class=\"hover:bg-gray-50\">\n");  
+            fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", rank++);  
+            fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", book_name);  
+            fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", doc_count);  
+            
+            // Button to show document list (using Alpine.js)  
+            fprintf(fp, "          <td class=\"px-4 py-2 border\">\n");  
+            fprintf(fp, "            <div x-data=\"{open: false}\">\n");  
+            fprintf(fp, "              <button @click=\"open = !open\" class=\"bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded\">\n");  
+            fprintf(fp, "                <span x-text=\"open ? '隐藏' : '查看'\"></span>\n");  
+            fprintf(fp, "              </button>\n");  
+            fprintf(fp, "              <div x-show=\"open\" class=\"mt-2\">\n");  
+            
+            // Get documents for this book  
+            char doc_sql[MAX_SQL_LEN];  
+            snprintf(doc_sql, sizeof(doc_sql),  
+                "SELECT md_documents.document_name, md_documents.identify as doc_identify, "  
+                "       author.account as author_account, author.real_name as author_real_name "  
+                "FROM md_documents "  
+                "JOIN md_members as author ON md_documents.member_id = author.member_id "  
+                "WHERE md_documents.book_id = %d "  
+                "ORDER BY md_documents.modify_time DESC",  
+                book_id);  
+            
+            sqlite3_stmt *doc_stmt;  
+            if (sqlite3_prepare_v2(db, doc_sql, -1, &doc_stmt, NULL) == SQLITE_OK) {  
+                fprintf(fp, "                <ul class=\"list-disc pl-5\">\n");  
+                while (sqlite3_step(doc_stmt) == SQLITE_ROW) {  
+                    const char *doc_name = (const char *)sqlite3_column_text(doc_stmt, 0);  
+                    const char *doc_identify = (const char *)sqlite3_column_text(doc_stmt, 1);  
+                    const char *author_account = (const char *)sqlite3_column_text(doc_stmt, 2);  
+                    const char *author_real_name = (const char *)sqlite3_column_text(doc_stmt, 3);  
+                    
+                    // Display author name or account  
+                    const char *author_display = author_real_name && strlen(author_real_name) > 0 ?   
+                                                 author_real_name : author_account;  
+                    
+                    char doc_link[CONFIG_MAX_LINE * 2];  
+                    snprintf(doc_link, sizeof(doc_link), "%s/%s/%s",   
+                             config->link_prefix, book_identify, doc_identify);  
+                    
+                    fprintf(fp, "                  <li><a href=\"%s\" class=\"text-blue-600 hover:underline\" target=\"_blank\">%s</a> [%s]</li>\n",   
+                           doc_link, doc_name, author_display);  
+                }  
+                fprintf(fp, "                </ul>\n");  
+                sqlite3_finalize(doc_stmt);  
+            }  
+            
+            fprintf(fp, "              </div>\n");  
+            fprintf(fp, "            </div>\n");  
+            fprintf(fp, "          </td>\n");  
+            fprintf(fp, "        </tr>\n");  
+        }  
+        sqlite3_finalize(stmt);  
     }  
 
-    sqlite3_stmt *stmt;  
-    int rc = sqlite3_prepare_v2(db, query, -1, &stmt, NULL);  
-    
-    if (rc != SQLITE_OK) {  
+    fprintf(fp, "      </tbody>\n");  
+    fprintf(fp, "    </table>\n");  
+    fprintf(fp, "  </div>\n");  
+
+    // Generate all groups ranking  
+    fprintf(fp, "  <div x-show=\"groupType === 'all'\" class=\"overflow-x-auto\">\n");  
+    fprintf(fp, "    <table class=\"min-w-full bg-white border border-gray-300\">\n");  
+    fprintf(fp, "      <thead class=\"bg-gray-100\">\n");  
+    fprintf(fp, "        <tr>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">排名</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">知识库名称</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">文档数量</th>\n");  
+    fprintf(fp, "          <th class=\"px-4 py-2 border\">文档列表</th>\n");  
+    fprintf(fp, "        </tr>\n");  
+    fprintf(fp, "      </thead>\n");  
+    fprintf(fp, "      <tbody>\n");  
+
+    char all_books_sql[MAX_SQL_LEN] =   
+        "SELECT md_books.book_id, md_books.book_name, md_books.identify, "  
+        "       COUNT(md_documents.document_id) as doc_count "  
+        "FROM md_books "  
+        "LEFT JOIN md_documents ON md_books.book_id = md_documents.book_id "  
+        "GROUP BY md_books.book_id "  
+        "ORDER BY doc_count DESC";  
+
+    if (sqlite3_prepare_v2(db, all_books_sql, -1, &stmt, NULL) != SQLITE_OK) {  
         fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));  
-        return;  
-    }  
-
-    int rank = 1;  
-    while (sqlite3_step(stmt) == SQLITE_ROW) {  
-        const char *doc_name = (const char*)sqlite3_column_text(stmt, 1);  
-        const char *doc_identify = (const char*)sqlite3_column_text(stmt, 2);  
-        const char *author_account = (const char*)sqlite3_column_text(stmt, 8);  
-        const char *author_real_name = (const char*)sqlite3_column_text(stmt, 9);  
-        const char *modifier_account = (const char*)sqlite3_column_text(stmt, 10);  
-        const char *modifier_real_name = (const char*)sqlite3_column_text(stmt, 11);  
-        const char *book_name = (const char*)sqlite3_column_text(stmt, 12);  
-        const char *book_identify = (const char*)sqlite3_column_text(stmt, 13);  
-        int view_count = sqlite3_column_int(stmt, 6);  
-        const char *modify_time = (const char*)sqlite3_column_text(stmt, 5);  
-
-        // Generate document link  
-        char doc_link[MAX_PATH_LEN];  
-        snprintf(doc_link, MAX_PATH_LEN, "%s/%s/%s",   
-                config.link_prefix,   
-                book_identify ? book_identify : "",   
-                doc_identify ? doc_identify : "");  
-
-        // Ensure values aren't NULL for display  
-        if (!doc_name) doc_name = "";  
-        if (!author_account) author_account = "";  
-        if (!author_real_name) author_real_name = "";  
-        if (!modifier_account) modifier_account = author_account;  
-        if (!modifier_real_name) modifier_real_name = author_real_name;  
-        if (!book_name) book_name = "";  
-        if (!modify_time) modify_time = "";  
-
-        // Prepare author and modifier display strings  
-        char author_display[MAX_NAME_LEN];  
-        char modifier_display[MAX_NAME_LEN];  
-        
-        if (author_real_name && author_real_name[0]) {  
-            snprintf(author_display, MAX_NAME_LEN, "%s (%s)", author_account, author_real_name);  
-        } else {  
-            snprintf(author_display, MAX_NAME_LEN, "%s", author_account);  
-        }  
-        
-        if (modifier_real_name && modifier_real_name[0]) {  
-            snprintf(modifier_display, MAX_NAME_LEN, "%s (%s)", modifier_account, modifier_real_name);  
-        } else {  
-            snprintf(modifier_display, MAX_NAME_LEN, "%s", modifier_account);  
-        }  
-
-        // Display row with rank highlighting  
-        fprintf(f, "                <tr class=\"hover:bg-gray-50 %s\">\n",   
-                rank <= 3 ? "bg-yellow-50" : "");  
-        fprintf(f, "                    <td class=\"py-3 px-4 %s font-bold\">%d</td>\n",   
-                rank <= 3 ? "text-amber-600" : "text-gray-500", rank++);  
-        fprintf(f, "                    <td class=\"py-3 px-4 font-medium text-blue-600\">"  
-                   "<a href=\"%s\" target=\"_blank\" class=\"hover:underline\">%s</a></td>\n",   
-                   doc_link, doc_name);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", author_display);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", modifier_display);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", book_name);  
-        fprintf(f, "                    <td class=\"py-3 px-4 font-medium %s\">%d</td>\n",   
-                rank <= 4 ? "text-amber-600" : "text-gray-500", view_count);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-500\">%s</td>\n", modify_time);  
-        fprintf(f, "                </tr>\n");  
-    }  
-
-    sqlite3_finalize(stmt);  
-    
-    fprintf(f, "                </tbody>\n");  
-    fprintf(f, "            </table>\n");  
-    fprintf(f, "        </div>\n");  
-}  
-
-// Function to write author rankings section  
-void write_author_rankings(FILE *f, sqlite3 *db) {  
-    fprintf(f, "<div x-show=\"tab === 'authors'\" x-cloak>\n");  
-    fprintf(f, "    <div x-data=\"{ timeRange: 'all', expandedAuthor: null }\">\n");  
-    
-    // Time range selector  
-    fprintf(f, "        <div class=\"mb-6 flex justify-center\">\n");  
-    fprintf(f, "            <div class=\"bg-white rounded-lg shadow-md p-1 inline-flex space-x-1\">\n");  
-    fprintf(f, "                <button @click=\"timeRange = 'all'; expandedAuthor = null\" :class=\"timeRange === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'\" class=\"px-4 py-2 rounded-md transition-colors\">\n");  
-    fprintf(f, "                    所有时间\n");  
-    fprintf(f, "                </button>\n");  
-    fprintf(f, "                <button @click=\"timeRange = 'month'; expandedAuthor = null\" :class=\"timeRange === 'month' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'\" class=\"px-4 py-2 rounded-md transition-colors\">\n");  
-    fprintf(f, "                    过去一个月\n");  
-    fprintf(f, "                </button>\n");  
-    fprintf(f, "                <button @click=\"timeRange = 'week'; expandedAuthor = null\" :class=\"timeRange === 'week' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'\" class=\"px-4 py-2 rounded-md transition-colors\">\n");  
-    fprintf(f, "                    过去一周\n");  
-    fprintf(f, "                </button>\n");  
-    fprintf(f, "            </div>\n");  
-    fprintf(f, "        </div>\n");  
-
-    // All time author rankings  
-    fprintf(f, "        <div x-show=\"timeRange === 'all'\">\n");  
-    fprintf(f, "            <h2 class=\"text-2xl font-bold mb-4 text-gray-800\">个人文档排名 (所有时间)</h2>\n");  
-    write_author_rankings_table(f, db, "all");  
-    fprintf(f, "        </div>\n");  
-
-    // Past month author rankings  
-    fprintf(f, "        <div x-show=\"timeRange === 'month'\" x-cloak>\n");  
-    fprintf(f, "            <h2 class=\"text-2xl font-bold mb-4 text-gray-800\">个人文档排名 (过去一个月)</h2>\n");  
-    write_author_rankings_table(f, db, "month");  
-    fprintf(f, "        </div>\n");  
-
-    // Past week author rankings  
-    fprintf(f, "        <div x-show=\"timeRange === 'week'\" x-cloak>\n");  
-    fprintf(f, "            <h2 class=\"text-2xl font-bold mb-4 text-gray-800\">个人文档排名 (过去一周)</h2>\n");  
-    write_author_rankings_table(f, db, "week");  
-    fprintf(f, "        </div>\n");  
-
-    fprintf(f, "    </div>\n");  
-    fprintf(f, "</div>\n");  
-}  
-
-// Helper function to write author rankings table with time filters  
-void write_author_rankings_table(FILE *f, sqlite3 *db, const char *time_range) {  
-    fprintf(f, "        <div class=\"overflow-x-auto\">\n");  
-    fprintf(f, "            <table class=\"min-w-full bg-white shadow-md rounded-lg overflow-hidden\">\n");  
-    fprintf(f, "                <thead class=\"bg-gray-100\">\n");  
-    fprintf(f, "                    <tr>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">排名</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">帐号</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">姓名</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档数量</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider\">操作</th>\n");  
-    fprintf(f, "                    </tr>\n");  
-    fprintf(f, "                </thead>\n");  
-    fprintf(f, "                <tbody class=\"divide-y divide-gray-200\">\n");  
-
-    char query[MAX_QUERY_LEN];  
-    
-    // Create query based on time range for author document counts  
-    if (strcmp(time_range, "week") == 0) {  
-        snprintf(query, MAX_QUERY_LEN,  
-            "SELECT m.member_id, m.account, m.real_name, COUNT(d.document_id) as doc_count "  
-            "FROM md_members m "  
-            "LEFT JOIN md_documents d ON m.member_id = d.member_id "  
-            "WHERE d.modify_time >= datetime('now', '-7 days') "  
-            "GROUP BY m.member_id "  
-            "HAVING doc_count > 0 "  
-            "ORDER BY doc_count DESC "  
-            "LIMIT 100");  
-    } else if (strcmp(time_range, "month") == 0) {  
-        snprintf(query, MAX_QUERY_LEN,  
-            "SELECT m.member_id, m.account, m.real_name, COUNT(d.document_id) as doc_count "  
-            "FROM md_members m "  
-            "LEFT JOIN md_documents d ON m.member_id = d.member_id "  
-            "WHERE d.modify_time >= datetime('now', '-30 days') "  
-            "GROUP BY m.member_id "  
-            "HAVING doc_count > 0 "  
-            "ORDER BY doc_count DESC "  
-            "LIMIT 100");  
     } else {  
-        snprintf(query, MAX_QUERY_LEN,  
-            "SELECT m.member_id, m.account, m.real_name, COUNT(d.document_id) as doc_count "  
-            "FROM md_members m "  
-            "LEFT JOIN md_documents d ON m.member_id = d.member_id "  
-            "GROUP BY m.member_id "  
-            "HAVING doc_count > 0 "  
-            "ORDER BY doc_count DESC "  
-            "LIMIT 100");  
-    }  
+        int rank = 1;  
+        while (sqlite3_step(stmt) == SQLITE_ROW) {  
+            int book_id = sqlite3_column_int(stmt, 0);  
+            const char *book_name = (const char *)sqlite3_column_text(stmt, 1);  
+            const char *book_identify = (const char *)sqlite3_column_text(stmt, 2);  
+            int doc_count = sqlite3_column_int(stmt, 3);  
 
-    sqlite3_stmt *stmt;  
-    int rc = sqlite3_prepare_v2(db, query, -1, &stmt, NULL);  
-    
-    if (rc != SQLITE_OK) {  
-        fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));  
-        return;  
-    }  
-
-    int rank = 1;  
-    while (sqlite3_step(stmt) == SQLITE_ROW) {  
-        int member_id = sqlite3_column_int(stmt, 0);  
-        const char *account = (const char*)sqlite3_column_text(stmt, 1);  
-        const char *real_name = (const char*)sqlite3_column_text(stmt, 2);  
-        int doc_count = sqlite3_column_int(stmt, 3);  
-
-        // Ensure names aren't NULL for display  
-        if (!account) account = "";  
-        if (!real_name) real_name = "";  
-
-        // Display author row  
-        fprintf(f, "                <tr class=\"hover:bg-gray-50 %s\">\n",   
-                rank <= 3 ? "bg-yellow-50" : "");  
-        fprintf(f, "                    <td class=\"py-3 px-4 %s font-bold\">%d</td>\n",   
-                rank <= 3 ? "text-amber-600" : "text-gray-500", rank++);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-800\">%s</td>\n", account);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-800\">%s</td>\n",   
-                    real_name[0] ? real_name : account);  
-        fprintf(f, "                    <td class=\"py-3 px-4 font-medium %s\">%d</td>\n",   
-                rank <= 4 ? "text-amber-600" : "text-gray-500", doc_count);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-center\">\n");  
-        fprintf(f, "                        <button @click=\"expandedAuthor = expandedAuthor === %d ? null : %d\" "  
-                    "class=\"px-3 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none "  
-                    "focus:ring-2 focus:ring-blue-300 transition-colors\">\n",   
-                    member_id, member_id);  
-        fprintf(f, "                            <span x-text=\"expandedAuthor === %d ? '收起' : '查看文档'\"></span>\n",   
-                    member_id);  
-        fprintf(f, "                        </button>\n");  
-        fprintf(f, "                    </td>\n");  
-        fprintf(f, "                </tr>\n");  
-
-        // Expandable row for author's documents  
-        fprintf(f, "                <tr x-show=\"expandedAuthor === %d\" x-cloak>\n", member_id);  
-        fprintf(f, "                    <td colspan=\"5\" class=\"p-0 bg-gray-50\">\n");  
-        fprintf(f, "                        <div class=\"p-4\">\n");  
-        fprintf(f, "                            <h4 class=\"font-medium text-gray-800 mb-2\">文档列表</h4>\n");  
-        fprintf(f, "                            <div class=\"overflow-y-auto max-h-96\">\n");  
-        fprintf(f, "                                <table class=\"min-w-full divide-y divide-gray-200\">\n");  
-        fprintf(f, "                                    <thead class=\"bg-gray-100\">\n");  
-        fprintf(f, "                                        <tr>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档名称</th>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">书籍名称</th>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">阅读次数</th>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">更新时间</th>\n");  
-        fprintf(f, "                                        </tr>\n");  
-        fprintf(f, "                                    </thead>\n");  
-        fprintf(f, "                                    <tbody class=\"divide-y divide-gray-200\">\n");  
-
-        // Query the author's documents  
-        char doc_query[MAX_QUERY_LEN];  
-        if (strcmp(time_range, "week") == 0) {  
-            snprintf(doc_query, MAX_QUERY_LEN,  
-                "SELECT d.document_name, d.identify as doc_identify, d.view_count, d.modify_time, "  
-                "b.book_name, b.identify as book_identify "  
-                "FROM md_documents d "  
-                "LEFT JOIN md_books b ON d.book_id = b.book_id "  
-                "WHERE d.member_id = %d "  
-                "AND d.modify_time >= datetime('now', '-7 days') "  
-                "ORDER BY d.modify_time DESC", member_id);  
-        } else if (strcmp(time_range, "month") == 0) {  
-            snprintf(doc_query, MAX_QUERY_LEN,  
-                "SELECT d.document_name, d.identify as doc_identify, d.view_count, d.modify_time, "  
-                "b.book_name, b.identify as book_identify "  
-                "FROM md_documents d "  
-                "LEFT JOIN md_books b ON d.book_id = b.book_id "  
-                "WHERE d.member_id = %d "  
-                "AND d.modify_time >= datetime('now', '-30 days') "  
-                "ORDER BY d.modify_time DESC", member_id);  
-        } else {  
-            snprintf(doc_query, MAX_QUERY_LEN,  
-                "SELECT d.document_name, d.identify as doc_identify, d.view_count, d.modify_time, "  
-                "b.book_name, b.identify as book_identify "  
-                "FROM md_documents d "  
-                "LEFT JOIN md_books b ON d.book_id = b.book_id "  
-                "WHERE d.member_id = %d "  
-                "ORDER BY d.modify_time DESC", member_id);  
-        }  
-
-        sqlite3_stmt *doc_stmt;  
-        rc = sqlite3_prepare_v2(db, doc_query, -1, &doc_stmt, NULL);  
-        
-        if (rc == SQLITE_OK) {  
-            while (sqlite3_step(doc_stmt) == SQLITE_ROW) {  
-                const char *doc_name = (const char*)sqlite3_column_text(doc_stmt, 0);  
-                const char *doc_identify = (const char*)sqlite3_column_text(doc_stmt, 1);  
-                int view_count = sqlite3_column_int(doc_stmt, 2);  
-                const char *modify_time = (const char*)sqlite3_column_text(doc_stmt, 3);  
-                const char *book_name = (const char*)sqlite3_column_text(doc_stmt, 4);  
-                const char *book_identify = (const char*)sqlite3_column_text(doc_stmt, 5);  
-
-                // Generate document link  
-                char doc_link[MAX_PATH_LEN];  
-                snprintf(doc_link, MAX_PATH_LEN, "%s/%s/%s",   
-                        config.link_prefix,   
-                        book_identify ? book_identify : "",   
-                        doc_identify ? doc_identify : "");  
-
-                // Ensure names aren't NULL for display  
-                if (!doc_name) doc_name = "";  
-                if (!book_name) book_name = "";  
-                if (!modify_time) modify_time = "";  
-
-                // Display document row  
-                fprintf(f, "                                        <tr class=\"hover:bg-gray-100\">\n");  
-                fprintf(f, "                                            <td class=\"py-2 px-3 font-medium text-blue-600\">"  
-                        "<a href=\"%s\" target=\"_blank\" class=\"hover:underline\">%s</a></td>\n",   
-                        doc_link, doc_name);  
-                fprintf(f, "                                            <td class=\"py-2 px-3 text-gray-500\">%s</td>\n", book_name);  
-                fprintf(f, "                                            <td class=\"py-2 px-3 text-gray-500\">%d</td>\n", view_count);  
-                fprintf(f, "                                            <td class=\"py-2 px-3 text-gray-500\">%s</td>\n", modify_time);  
-                fprintf(f, "                                        </tr>\n");  
+            fprintf(fp, "        <tr class=\"hover:bg-gray-50\">\n");  
+            fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", rank++);  
+            fprintf(fp, "          <td class=\"px-4 py-2 border\">%s</td>\n", book_name);  
+            fprintf(fp, "          <td class=\"px-4 py-2 border text-center\">%d</td>\n", doc_count);  
+            
+            // Button to show document list (using Alpine.js)  
+            fprintf(fp, "          <td class=\"px-4 py-2 border\">\n");  
+            fprintf(fp, "            <div x-data=\"{open: false}\">\n");  
+            fprintf(fp, "              <button @click=\"open = !open\" class=\"bg-blue-500 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded\">\n");  
+            fprintf(fp, "                <span x-text=\"open ? '隐藏' : '查看'\"></span>\n");  
+            fprintf(fp, "              </button>\n");  
+            fprintf(fp, "              <div x-show=\"open\" class=\"mt-2\">\n");  
+            
+            // Get documents for this book  
+            char doc_sql[MAX_SQL_LEN];  
+            snprintf(doc_sql, sizeof(doc_sql),  
+                "SELECT md_documents.document_name, md_documents.identify as doc_identify, "  
+                "       author.account as author_account, author.real_name as author_real_name "  
+                "FROM md_documents "  
+                "JOIN md_members as author ON md_documents.member_id = author.member_id "  
+                "WHERE md_documents.book_id = %d "  
+                "ORDER BY md_documents.modify_time DESC "  
+                "LIMIT 50",  // Limit to 50 documents per book for performance  
+                book_id);  
+            
+            sqlite3_stmt *doc_stmt;  
+            if (sqlite3_prepare_v2(db, doc_sql, -1, &doc_stmt, NULL) == SQLITE_OK) {  
+                fprintf(fp, "                <ul class=\"list-disc pl-5\">\n");  
+                while (sqlite3_step(doc_stmt) == SQLITE_ROW) {  
+                    const char *doc_name = (const char *)sqlite3_column_text(doc_stmt, 0);  
+                    const char *doc_identify = (const char *)sqlite3_column_text(doc_stmt, 1);  
+                    const char *author_account = (const char *)sqlite3_column_text(doc_stmt, 2);  
+                    const char *author_real_name = (const char *)sqlite3_column_text(doc_stmt, 3);  
+                    
+                    // Display author name or account  
+                    const char *author_display = author_real_name && strlen(author_real_name) > 0 ?   
+                                                 author_real_name : author_account;  
+                    
+                    char doc_link[CONFIG_MAX_LINE * 2];  
+                    snprintf(doc_link, sizeof(doc_link), "%s/%s/%s",   
+                             config->link_prefix, book_identify, doc_identify);  
+                    
+                    fprintf(fp, "                  <li><a href=\"%s\" class=\"text-blue-600 hover:underline\" target=\"_blank\">%s</a> [%s]</li>\n",   
+                           doc_link, doc_name, author_display);  
+                }  
+                fprintf(fp, "                </ul>\n");  
+                sqlite3_finalize(doc_stmt);  
             }  
-            sqlite3_finalize(doc_stmt);  
+            
+            fprintf(fp, "              </div>\n");  
+            fprintf(fp, "            </div>\n");  
+            fprintf(fp, "          </td>\n");  
+            fprintf(fp, "        </tr>\n");  
         }  
-
-        fprintf(f, "                                    </tbody>\n");  
-        fprintf(f, "                                </table>\n");  
-        fprintf(f, "                            </div>\n");  
-        fprintf(f, "                        </div>\n");  
-        fprintf(f, "                    </td>\n");  
-        fprintf(f, "                </tr>\n");  
+        sqlite3_finalize(stmt);  
     }  
 
-    sqlite3_finalize(stmt);  
+    fprintf(fp, "      </tbody>\n");  
+    fprintf(fp, "    </table>\n");  
+    fprintf(fp, "  </div>\n");  
     
-    fprintf(f, "                </tbody>\n");  
-    fprintf(f, "            </table>\n");  
-    fprintf(f, "        </div>\n");  
+    fprintf(fp, "</div>\n");  
 }  
 
-// Function to write book rankings section  
-void write_book_rankings(FILE *f, sqlite3 *db) {  
-    fprintf(f, "<div x-show=\"tab === 'books'\" x-cloak>\n");  
-    fprintf(f, "    <div x-data=\"{ bookGroup: 'selected', expandedBook: null }\">\n");  
+// Generate the complete HTML page  
+bool generate_html(Config *config) {  
+    sqlite3 *db;  
     
-    // Group selector  
-    fprintf(f, "        <div class=\"mb-6 flex justify-center\">\n");  
-    fprintf(f, "            <div class=\"bg-white rounded-lg shadow-md p-1 inline-flex space-x-1\">\n");  
-    fprintf(f, "                <button @click=\"bookGroup = 'selected'; expandedBook = null\" :class=\"bookGroup === 'selected' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'\" class=\"px-4 py-2 rounded-md transition-colors\">\n");  
-    fprintf(f, "                    指定组文档排名\n");  
-    fprintf(f, "                </button>\n");  
-    fprintf(f, "                <button @click=\"bookGroup = 'all'; expandedBook = null\" :class=\"bookGroup === 'all' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-800'\" class=\"px-4 py-2 rounded-md transition-colors\">\n");  
-    fprintf(f, "                    所有组文档排名\n");  
-    fprintf(f, "                </button>\n");  
-    fprintf(f, "            </div>\n");  
-    fprintf(f, "        </div>\n");  
-
-    // Selected books rankings  
-    fprintf(f, "        <div x-show=\"bookGroup === 'selected'\">\n");  
-    fprintf(f, "            <h2 class=\"text-2xl font-bold mb-4 text-gray-800\">指定组文档排名</h2>\n");  
-    write_selected_book_rankings_table(f, db);  
-    fprintf(f, "        </div>\n");  
-
-    // All books rankings  
-    fprintf(f, "        <div x-show=\"bookGroup === 'all'\" x-cloak>\n");  
-    fprintf(f, "            <h2 class=\"text-2xl font-bold mb-4 text-gray-800\">所有组文档排名</h2>\n");  
-    write_all_book_rankings_table(f, db);  
-    fprintf(f, "        </div>\n");  
-
-    fprintf(f, "    </div>\n");  
-    fprintf(f, "</div>\n");  
+    // Open database  
+    if (sqlite3_open(config->db_path, &db) != SQLITE_OK) {  
+        fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));  
+        sqlite3_close(db);  
+        return false;  
+    }  
+    
+    // Open output file  
+    FILE *fp = fopen(config->html_path, "w");  
+    if (!fp) {  
+        fprintf(stderr, "Cannot open output file: %s\n", config->html_path);  
+        sqlite3_close(db);  
+        return false;  
+    }  
+    
+    // Get current time  
+    time_t t = time(NULL);  
+    struct tm *tm_info = localtime(&t);  
+    char timestamp[64];  
+    strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", tm_info);  
+    
+    // Write HTML header  
+    fprintf(fp, "<!DOCTYPE html>\n");  
+    fprintf(fp, "<html lang=\"zh-CN\">\n");  
+    fprintf(fp, "<head>\n");  
+    fprintf(fp, "  <meta charset=\"UTF-8\">\n");  
+    fprintf(fp, "  <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n");  
+    fprintf(fp, "  <title>MinDoc 文档统计排名</title>\n");  
+    fprintf(fp, "  <link href=\"tailwind.min.css\" rel=\"stylesheet\">\n");  
+    fprintf(fp, "  <script src=\"alpine.min.js\" defer></script>\n");  
+    fprintf(fp, "</head>\n");  
+    fprintf(fp, "<body class=\"bg-gray-100 min-h-screen\">\n");  
+    
+    // Alpine.js app  
+    fprintf(fp, "<div x-data=\"{ \n");  
+    fprintf(fp, "  currentView: 'latest', \n");  
+    fprintf(fp, "  popularTimeframe: 'all',\n");  
+    fprintf(fp, "  userTimeframe: 'all',\n");  
+    fprintf(fp, "  groupType: 'specified'\n");  
+    fprintf(fp, "}\" class=\"container mx-auto px-4 py-8\">\n");  
+    
+    // Header  
+    fprintf(fp, "  <header class=\"bg-white shadow-md rounded-lg p-6 mb-6\">\n");  
+    fprintf(fp, "    <h1 class=\"text-3xl font-bold text-gray-800 mb-2\">MinDoc 文档统计排名</h1>\n");  
+    fprintf(fp, "    <p class=\"text-gray-600\">数据更新时间: %s</p>\n", timestamp);  
+    fprintf(fp, "  </header>\n");  
+    
+    // Navigation  
+    fprintf(fp, "  <nav class=\"bg-white shadow-md rounded-lg p-4 mb-6 sticky top-0 z-10\">\n");  
+    fprintf(fp, "    <div class=\"flex space-x-4\">\n");  
+    fprintf(fp, "      <button @click=\"currentView = 'latest'\" :class=\"currentView === 'latest' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg\">最新更新文档</button>\n");  
+    fprintf(fp, "      <button @click=\"currentView = 'popular'\" :class=\"currentView === 'popular' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg\">最受欢迎文档</button>\n");  
+    fprintf(fp, "      <button @click=\"currentView = 'user'\" :class=\"currentView === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg\">个人文档排名</button>\n");  
+    fprintf(fp, "      <button @click=\"currentView = 'group'\" :class=\"currentView === 'group' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg\">组内文档排名</button>\n");  
+    fprintf(fp, "    </div>\n");  
+    fprintf(fp, "  </nav>\n");  
+    
+    // Main content  
+    fprintf(fp, "  <main class=\"bg-white shadow-md rounded-lg p-6\">\n");  
+    
+    // Generate content for each view  
+    generate_latest_documents_html(fp, db, config);  
+    generate_popular_documents_html(fp, db, config);  
+    generate_user_rankings_html(fp, db, config);  
+    generate_group_rankings_html(fp, db, config);  
+    
+    fprintf(fp, "  </main>\n");  
+    
+    // Footer  
+    fprintf(fp, "  <footer class=\"mt-8 text-center text-gray-600 text-sm\">\n");  
+    fprintf(fp, "    <p>© %d MinDoc文档统计排名生成器</p>\n", tm_info->tm_year + 1900);  
+    fprintf(fp, "  </footer>\n");  
+    
+    fprintf(fp, "</div>\n");  
+    fprintf(fp, "</body>\n");  
+    fprintf(fp, "</html>\n");  
+    
+    fclose(fp);  
+    sqlite3_close(db);  
+    return true;  
 }  
 
-// Helper function to write selected book rankings table  
-void write_selected_book_rankings_table(FILE *f, sqlite3 *db) {  
-    fprintf(f, "        <div class=\"overflow-x-auto\">\n");  
-    fprintf(f, "            <table class=\"min-w-full bg-white shadow-md rounded-lg overflow-hidden\">\n");  
-    fprintf(f, "                <thead class=\"bg-gray-100\">\n");  
-    fprintf(f, "                    <tr>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">排名</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">书籍名称</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档数量</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider\">操作</th>\n");  
-    fprintf(f, "                    </tr>\n");  
-    fprintf(f, "                </thead>\n");  
-    fprintf(f, "                <tbody class=\"divide-y divide-gray-200\">\n");  
-
-    char book_list[MAX_QUERY_LEN] = "''"; // Start with empty string for SQL IN clause  
-    
-    // Build the book list for the IN clause  
-    for (int i = 0; i < config.sort_books_count; i++) {  
-        char temp[MAX_BOOK_NAME_LEN * 2]; // Double size for quotes and escaping  
-        snprintf(temp, sizeof(temp), ", '%s'", config.sort_books[i]);  
-        strcat(book_list, temp);  
-    }  
-
-    char query[MAX_QUERY_LEN];  
-    snprintf(query, MAX_QUERY_LEN,  
-        "SELECT b.book_id, b.book_name, b.identify, COUNT(d.document_id) as doc_count "  
-        "FROM md_books b "  
-        "LEFT JOIN md_documents d ON b.book_id = d.book_id "  
-        "WHERE b.book_name IN (%s) "  
-        "GROUP BY b.book_id "  
-        "ORDER BY doc_count DESC", book_list);  
-
-    sqlite3_stmt *stmt;  
-    int rc = sqlite3_prepare_v2(db, query, -1, &stmt, NULL);  
-    
-    if (rc != SQLITE_OK) {  
-        fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));  
-        return;  
-    }  
-
-    int rank = 1;  
-    while (sqlite3_step(stmt) == SQLITE_ROW) {  
-        int book_id = sqlite3_column_int(stmt, 0);  
-        const char *book_name = (const char*)sqlite3_column_text(stmt, 1);  
-        const char *identify = (const char*)sqlite3_column_text(stmt, 2);  
-        int doc_count = sqlite3_column_int(stmt, 3);  
-
-        // Ensure names aren't NULL for display  
-        if (!book_name) book_name = "";  
-        if (!identify) identify = "";  
-
-        // Display book row  
-        fprintf(f, "                <tr class=\"hover:bg-gray-50 %s\">\n",   
-                rank <= 3 ? "bg-yellow-50" : "");  
-        fprintf(f, "                    <td class=\"py-3 px-4 %s font-bold\">%d</td>\n",   
-                rank <= 3 ? "text-amber-600" : "text-gray-500", rank++);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-800\">%s</td>\n", book_name);  
-        fprintf(f, "                    <td class=\"py-3 px-4 font-medium %s\">%d</td>\n",   
-                rank <= 4 ? "text-amber-600" : "text-gray-500", doc_count);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-center\">\n");  
-        fprintf(f, "                        <button @click=\"expandedBook = expandedBook === %d ? null : %d\" "  
-                    "class=\"px-3 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none "  
-                    "focus:ring-2 focus:ring-blue-300 transition-colors\">\n",   
-                    book_id, book_id);  
-        fprintf(f, "                            <span x-text=\"expandedBook === %d ? '收起' : '查看文档'\"></span>\n",   
-                    book_id);  
-        fprintf(f, "                        </button>\n");  
-        fprintf(f, "                    </td>\n");  
-        fprintf(f, "                </tr>\n");  
-
-        // Expandable row for book's documents  
-        fprintf(f, "                <tr x-show=\"expandedBook === %d\" x-cloak>\n", book_id);  
-        fprintf(f, "                    <td colspan=\"4\" class=\"p-0 bg-gray-50\">\n");  
-        fprintf(f, "                        <div class=\"p-4\">\n");  
-        fprintf(f, "                            <h4 class=\"font-medium text-gray-800 mb-2\">文档列表</h4>\n");  
-        fprintf(f, "                            <div class=\"overflow-y-auto max-h-96\">\n");  
-        fprintf(f, "                                <table class=\"min-w-full divide-y divide-gray-200\">\n");  
-        fprintf(f, "                                    <thead class=\"bg-gray-100\">\n");  
-        fprintf(f, "                                        <tr>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档名称</th>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">作者</th>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">阅读次数</th>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">更新时间</th>\n");  
-        fprintf(f, "                                        </tr>\n");  
-        fprintf(f, "                                    </thead>\n");  
-        fprintf(f, "                                    <tbody class=\"divide-y divide-gray-200\">\n");  
-
-        // Query the book's documents  
-        char doc_query[MAX_QUERY_LEN];  
-        snprintf(doc_query, MAX_QUERY_LEN,  
-            "SELECT d.document_name, d.identify as doc_identify, d.view_count, d.modify_time, "  
-            "m.account, m.real_name "  
-            "FROM md_documents d "  
-            "LEFT JOIN md_members m ON d.member_id = m.member_id "  
-            "WHERE d.book_id = %d "  
-            "ORDER BY d.view_count DESC, d.modify_time DESC", book_id);  
-
-        sqlite3_stmt *doc_stmt;  
-        rc = sqlite3_prepare_v2(db, doc_query, -1, &doc_stmt, NULL);  
-        
-        if (rc == SQLITE_OK) {  
-            while (sqlite3_step(doc_stmt) == SQLITE_ROW) {  
-                const char *doc_name = (const char*)sqlite3_column_text(doc_stmt, 0);  
-                const char *doc_identify = (const char*)sqlite3_column_text(doc_stmt, 1);  
-                int view_count = sqlite3_column_int(doc_stmt, 2);  
-                const char *modify_time = (const char*)sqlite3_column_text(doc_stmt, 3);  
-                const char *account = (const char*)sqlite3_column_text(doc_stmt, 4);  
-                const char *real_name = (const char*)sqlite3_column_text(doc_stmt, 5);  
-
-                // Generate document link  
-                char doc_link[MAX_PATH_LEN];  
-                snprintf(doc_link, MAX_PATH_LEN, "%s/%s/%s",   
-                        config.link_prefix,   
-                        identify,   
-                        doc_identify ? doc_identify : "");  
-
-                // Ensure names aren't NULL for display  
-                if (!doc_name) doc_name = "";  
-                if (!account) account = "";  
-                if (!real_name) real_name = "";  
-                if (!modify_time) modify_time = "";  
-
-                // Display document row  
-                fprintf(f, "                                        <tr class=\"hover:bg-gray-100\">\n");  
-                fprintf(f, "                                            <td class=\"py-2 px-3 font-medium text-blue-600\">"  
-                        "<a href=\"%s\" target=\"_blank\" class=\"hover:underline\">%s</a></td>\n",   
-                        doc_link, doc_name);  
-                fprintf(f, "                                            <td class=\"py-2 px-3 text-gray-500\">%s</td>\n",   
-                        real_name && real_name[0] ? real_name : account);  
-                fprintf(f, "                                            <td class=\"py-2 px-3 text-gray-500\">%d</td>\n", view_count);  
-                fprintf(f, "                                            <td class=\"py-2 px-3 text-gray-500\">%s</td>\n", modify_time);  
-                fprintf(f, "                                        </tr>\n");  
-            }  
-            sqlite3_finalize(doc_stmt);  
-        }  
-
-        fprintf(f, "                                    </tbody>\n");  
-        fprintf(f, "                                </table>\n");  
-        fprintf(f, "                            </div>\n");  
-        fprintf(f, "                        </div>\n");  
-        fprintf(f, "                    </td>\n");  
-        fprintf(f, "                </tr>\n");  
-    }  
-
-    sqlite3_finalize(stmt);  
-    
-    fprintf(f, "                </tbody>\n");  
-    fprintf(f, "            </table>\n");  
-    fprintf(f, "        </div>\n");  
-}  
-
-// Helper function to write all book rankings table  
-void write_all_book_rankings_table(FILE *f, sqlite3 *db) {  
-    fprintf(f, "        <div class=\"overflow-x-auto\">\n");  
-    fprintf(f, "            <table class=\"min-w-full bg-white shadow-md rounded-lg overflow-hidden\">\n");  
-    fprintf(f, "                <thead class=\"bg-gray-100\">\n");  
-    fprintf(f, "                    <tr>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">排名</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">书籍名称</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档数量</th>\n");  
-    fprintf(f, "                        <th class=\"py-3 px-4 text-center text-xs font-medium text-gray-500 uppercase tracking-wider\">操作</th>\n");  
-    fprintf(f, "                    </tr>\n");  
-    fprintf(f, "                </thead>\n");  
-    fprintf(f, "                <tbody class=\"divide-y divide-gray-200\">\n");  
-
-    char query[MAX_QUERY_LEN];  
-    snprintf(query, MAX_QUERY_LEN,  
-        "SELECT b.book_id, b.book_name, b.identify, COUNT(d.document_id) as doc_count "  
-        "FROM md_books b "  
-        "LEFT JOIN md_documents d ON b.book_id = d.book_id "  
-        "GROUP BY b.book_id "  
-        "HAVING doc_count > 0 "  
-        "ORDER BY doc_count DESC "  
-        "LIMIT 100");  
-
-    sqlite3_stmt *stmt;  
-    int rc = sqlite3_prepare_v2(db, query, -1, &stmt, NULL);  
-    
-    if (rc != SQLITE_OK) {  
-        fprintf(stderr, "SQL error: %s\n", sqlite3_errmsg(db));  
-        return;  
-    }  
-
-    int rank = 1;  
-    while (sqlite3_step(stmt) == SQLITE_ROW) {  
-        int book_id = sqlite3_column_int(stmt, 0);  
-        const char *book_name = (const char*)sqlite3_column_text(stmt, 1);  
-        const char *identify = (const char*)sqlite3_column_text(stmt, 2);  
-        int doc_count = sqlite3_column_int(stmt, 3);  
-
-        // Ensure names aren't NULL for display  
-        if (!book_name) book_name = "";  
-        if (!identify) identify = "";  
-
-        // Display book row  
-        fprintf(f, "                <tr class=\"hover:bg-gray-50 %s\">\n",   
-                rank <= 3 ? "bg-yellow-50" : "");  
-        fprintf(f, "                    <td class=\"py-3 px-4 %s font-bold\">%d</td>\n",   
-                rank <= 3 ? "text-amber-600" : "text-gray-500", rank++);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-gray-800\">%s</td>\n", book_name);  
-        fprintf(f, "                    <td class=\"py-3 px-4 font-medium %s\">%d</td>\n",   
-                rank <= 4 ? "text-amber-600" : "text-gray-500", doc_count);  
-        fprintf(f, "                    <td class=\"py-3 px-4 text-center\">\n");  
-        fprintf(f, "                        <button @click=\"expandedBook = expandedBook === %d ? null : %d\" "  
-                    "class=\"px-3 py-1 rounded bg-blue-100 text-blue-700 hover:bg-blue-200 focus:outline-none "  
-                    "focus:ring-2 focus:ring-blue-300 transition-colors\">\n",   
-                    book_id, book_id);  
-        fprintf(f, "                            <span x-text=\"expandedBook === %d ? '收起' : '查看文档'\"></span>\n",   
-                    book_id);  
-        fprintf(f, "                        </button>\n");  
-        fprintf(f, "                    </td>\n");  
-        fprintf(f, "                </tr>\n");  
-
-        // Expandable row for book's documents  
-        fprintf(f, "                <tr x-show=\"expandedBook === %d\" x-cloak>\n", book_id);  
-        fprintf(f, "                    <td colspan=\"4\" class=\"p-0 bg-gray-50\">\n");  
-        fprintf(f, "                        <div class=\"p-4\">\n");  
-        fprintf(f, "                            <h4 class=\"font-medium text-gray-800 mb-2\">文档列表</h4>\n");  
-        fprintf(f, "                            <div class=\"overflow-y-auto max-h-96\">\n");  
-        fprintf(f, "                                <table class=\"min-w-full divide-y divide-gray-200\">\n");  
-        fprintf(f, "                                    <thead class=\"bg-gray-100\">\n");  
-        fprintf(f, "                                        <tr>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">文档名称</th>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">作者</th>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">阅读次数</th>\n");  
-        fprintf(f, "                                            <th class=\"py-2 px-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider\">更新时间</th>\n");  
-        fprintf(f, "                                        </tr>\n");  
-        fprintf(f, "                                    </thead>\n");  
-        fprintf(f, "                                    <tbody class=\"divide-y divide-gray-200\">\n");  
-
-        // Query the book's documents  
-        char doc_query[MAX_QUERY_LEN];  
-        snprintf(doc_query, MAX_QUERY_LEN,  
-            "SELECT d.document_name, d.identify as doc_identify, d.view_count, d.modify_time, "  
-            "m.account, m.real_name "  
-            "FROM md_documents d "  
-            "LEFT JOIN md_members m ON d.member_id = m.member_id "  
-            "WHERE d.book_id = %d "  
-            "ORDER BY d.view_count DESC, d.modify_time DESC", book_id);  
-
-        sqlite3_stmt *doc_stmt;  
-        rc = sqlite3_prepare_v2(db, doc_query, -1, &doc_stmt, NULL);  
-        
-        if (rc == SQLITE_OK) {  
-            while (sqlite3_step(doc_stmt) == SQLITE_ROW) {  
-                const char *doc_name = (const char*)sqlite3_column_text(doc_stmt, 0);  
-                const char *doc_identify = (const char*)sqlite3_column_text(doc_stmt, 1);  
-                int view_count = sqlite3_column_int(doc_stmt, 2);  
-                const char *modify_time = (const char*)sqlite3_column_text(doc_stmt, 3);  
-                const char *account = (const char*)sqlite3_column_text(doc_stmt, 4);  
-                const char *real_name = (const char*)sqlite3_column_text(doc_stmt, 5);  
-
-                // Generate document link  
-                char doc_link[MAX_PATH_LEN];  
-                snprintf(doc_link, MAX_PATH_LEN, "%s/%s/%s",   
-                        config.link_prefix,   
-                        identify,   
-                        doc_identify ? doc_identify : "");  
-
-                // Ensure names aren't NULL for display  
-                if (!doc_name) doc_name = "";  
-                if (!account) account = "";  
-                if (!real_name) real_name = "";  
-                if (!modify_time) modify_time = "";  
-
-                // Display document row  
-                fprintf(f, "                                        <tr class=\"hover:bg-gray-100\">\n");  
-                fprintf(f, "                                            <td class=\"py-2 px-3 font-medium text-blue-600\">"  
-                        "<a href=\"%s\" target=\"_blank\" class=\"hover:underline\">%s</a></td>\n",   
-                        doc_link, doc_name);  
-                fprintf(f, "                                            <td class=\"py-2 px-3 text-gray-500\">%s</td>\n",   
-                        real_name && real_name[0] ? real_name : account);  
-                fprintf(f, "                                            <td class=\"py-2 px-3 text-gray-500\">%d</td>\n", view_count);  
-                fprintf(f, "                                            <td class=\"py-2 px-3 text-gray-500\">%s</td>\n", modify_time);  
-                fprintf(f, "                                        </tr>\n");  
-            }  
-            sqlite3_finalize(doc_stmt);  
-        }  
-
-        fprintf(f, "                                    </tbody>\n");  
-        fprintf(f, "                                </table>\n");  
-        fprintf(f, "                            </div>\n");  
-        fprintf(f, "                        </div>\n");  
-        fprintf(f, "                    </td>\n");  
-        fprintf(f, "                </tr>\n");  
-    }  
-
-    sqlite3_finalize(stmt);  
-    
-    fprintf(f, "                </tbody>\n");  
-    fprintf(f, "            </table>\n");  
-    fprintf(f, "        </div>\n");  
-}
