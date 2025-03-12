@@ -108,6 +108,7 @@ char *get_time_condition(const char *timeframe) {
 }  
 
 // Generate HTML for latest updated documents  
+// Generate HTML for latest updated documents  
 void generate_latest_documents_html(FILE *fp, sqlite3 *db, Config *config) {  
     sqlite3_stmt *stmt;  
     const char *sql =   
@@ -232,7 +233,6 @@ int main(int argc, char *argv[]) {
     
     return 0;  
 }  
-
 // Generate HTML for popular documents  
 void generate_popular_documents_html(FILE *fp, sqlite3 *db, Config *config) {  
     fprintf(fp, "<div x-show=\"currentView === 'popular'\" class=\"w-full\">\n");  
@@ -760,5 +760,4 @@ bool generate_html(Config *config) {
     fclose(fp);  
     sqlite3_close(db);  
     return true;  
-}  
-
+}
