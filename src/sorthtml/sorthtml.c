@@ -5,6 +5,7 @@
 #include <time.h>  
 #include <sqlite3.h>  
 #include <stdbool.h>  
+#include <errno.h>  
 
 #define CONFIG_MAX_LINE 1024  
 #define MAX_SORT_BOOKS 50  
@@ -14,7 +15,8 @@
 
 typedef struct {  
     int recycle_time;  
-    char db_path[CONFIG_MAX_LINE];  
+    char db_path[CONFIG_MAX_LINE];
+    char backup_db_path[CONFIG_MAX_LINE];	
     char html_path[CONFIG_MAX_LINE];  
     char sort_books[MAX_SORT_BOOKS][MAX_BOOK_NAME_LEN];  
     int sort_books_count;  
@@ -31,10 +33,11 @@ void generate_user_rankings_html(FILE *fp, sqlite3 *db, Config *config);
 void generate_group_rankings_html(FILE *fp, sqlite3 *db, Config *config);  
 
 // Config file parsing  
+// 配置文件解析  
 bool load_config(const char *config_path, Config *config) {  
     FILE *fp = fopen(config_path, "r");  
     if (!fp) {  
-        fprintf(stderr, "Failed to open config file: %s\n", config_path);  
+        fprintf(stderr, "无法打开配置文件: %s\n", config_path);  
         return false;  
     }  
 
@@ -42,7 +45,7 @@ bool load_config(const char *config_path, Config *config) {
     config->sort_books_count = 0;  
 
     while (fgets(line, sizeof(line), fp)) {  
-        // Skip comments and empty lines  
+        // 跳过注释和空行  
         if (line[0] == '#' || line[0] == '\n') {  
             continue;  
         }  
@@ -54,7 +57,7 @@ bool load_config(const char *config_path, Config *config) {
             continue;  
         }  
 
-        // Trim whitespace  
+        // 去除空格  
         while (*key && (*key == ' ' || *key == '\t')) key++;  
         while (*value && (*value == ' ' || *value == '\t')) value++;  
 
@@ -68,6 +71,8 @@ bool load_config(const char *config_path, Config *config) {
             config->recycle_time = atoi(value);  
         } else if (strcmp(key, "db_path") == 0) {  
             strncpy(config->db_path, value, CONFIG_MAX_LINE - 1);  
+        } else if (strcmp(key, "backup_db_path") == 0) {  
+            strncpy(config->backup_db_path, value, CONFIG_MAX_LINE - 1);  
         } else if (strcmp(key, "html_path") == 0) {  
             strncpy(config->html_path, value, CONFIG_MAX_LINE - 1);  
         } else if (strcmp(key, "link_prefix") == 0) {  
@@ -75,7 +80,7 @@ bool load_config(const char *config_path, Config *config) {
         } else if (strcmp(key, "sort_books") == 0) {  
             char *book = strtok(value, ",");  
             while (book && config->sort_books_count < MAX_SORT_BOOKS) {  
-                // Trim whitespace  
+                // 去除空格  
                 while (*book && (*book == ' ' || *book == '\t')) book++;  
                 char *end = book + strlen(book) - 1;  
                 while (end > book && (*end == ' ' || *end == '\t')) *end-- = '\0';  
@@ -92,7 +97,7 @@ bool load_config(const char *config_path, Config *config) {
     return true;  
 }  
 
-// Helper function to get the time condition for SQL queries  
+// SQL查询时间条件辅助函数  
 char *get_time_condition(const char *timeframe) {  
     static char condition[256];  
     
@@ -101,13 +106,12 @@ char *get_time_condition(const char *timeframe) {
     } else if (strcmp(timeframe, "month") == 0) {  
         strcpy(condition, "AND md_documents.modify_time >= datetime('now', '-30 days')");  
     } else {  
-        condition[0] = '\0';  // All time, no condition  
+        condition[0] = '\0';  // 所有时间，无条件  
     }  
     
     return condition;  
 }  
 
-  
 // Generate HTML for latest updated documents  
 void generate_latest_documents_html(FILE *fp, sqlite3 *db, Config *config) {  
     sqlite3_stmt *stmt;  
@@ -211,30 +215,93 @@ int main(int argc, char *argv[]) {
     const char *config_path = (argc > 1) ? argv[1] : DEFAULT_CONFIG_PATH;  
     
     if (!load_config(config_path, &config)) {  
-        fprintf(stderr, "Failed to load configuration.\n");  
+        fprintf(stderr, "加载配置失败。\n");  
         return 1;  
     }  
     
-    printf("Configuration loaded. Starting document ranking generator...\n");  
-    printf("Database path: %s\n", config.db_path);  
-    printf("HTML output path: %s\n", config.html_path);  
-    printf("Update cycle: %d minutes\n", config.recycle_time);  
+    printf("配置已加载。启动文档排名生成器...\n");  
+    printf("数据库路径: %s\n", config.db_path);  
+    printf("备份数据库路径: %s\n", config.backup_db_path);  
+    printf("HTML输出路径: %s\n", config.html_path);  
+    printf("更新周期: %d 分钟\n", config.recycle_time);  
     
-    // Main loop for periodic updates  
+    // 主循环，定期更新  
     while (1) {  
-        printf("Generating HTML...\n");  
-        if (generate_html(&config)) {  
-            printf("HTML generated successfully at %s\n", config.html_path);  
+        // 创建数据库备份  
+        printf("正在创建数据库备份...\n");  
+        FILE *src = fopen(config.db_path, "rb");  
+        if (!src) {  
+            fprintf(stderr, "无法打开源数据库: %s (错误: %s)\n",   
+                    config.db_path, strerror(errno));  
         } else {  
-            fprintf(stderr, "Failed to generate HTML.\n");  
+            // 创建备份文件  
+            FILE *dst = fopen(config.backup_db_path, "wb");  
+            if (!dst) {  
+                // 获取错误信息  
+                char *error_msg = strerror(errno);  
+                fprintf(stderr, "无法创建/打开备份数据库: %s (错误: %s)\n",   
+                        config.backup_db_path, error_msg);  
+                
+                // 检查目录是否存在  
+                char backup_dir[CONFIG_MAX_LINE];  
+                strncpy(backup_dir, config.backup_db_path, CONFIG_MAX_LINE - 1);  
+                
+                // 查找最后一个斜杠以获取目录路径  
+                char *last_slash = strrchr(backup_dir, '/');  
+                if (last_slash) {  
+                    *last_slash = '\0';  // 在最后一个斜杠处截断以获取目录  
+                    
+                    // 如果目录不存在，尝试创建它  
+                    char mkdir_cmd[CONFIG_MAX_LINE * 2];  
+                    snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p %s", backup_dir);  
+                    int mkdir_result = system(mkdir_cmd);  
+                    
+                    if (mkdir_result == 0) {  
+                        printf("已为备份创建目录: %s\n", backup_dir);  
+                        // 再次尝试打开备份文件  
+                        dst = fopen(config.backup_db_path, "wb");  
+                        if (!dst) {  
+                            fprintf(stderr, "创建目录后仍无法创建备份文件: %s\n",   
+                                    strerror(errno));  
+                        }  
+                    } else {  
+                        fprintf(stderr, "无法创建目录: %s\n", backup_dir);  
+                    }  
+                }  
+                
+                if (!dst) {  
+                    fclose(src);  
+                    fprintf(stderr, "由于错误跳过备份。\n");  
+                    goto generate_html;  // 跳到HTML生成  
+                }  
+            }  
+            
+            // 复制数据库文件  
+            char buffer[8192];  
+            size_t bytes;  
+            while ((bytes = fread(buffer, 1, sizeof(buffer), src)) > 0) {  
+                fwrite(buffer, 1, bytes, dst);  
+            }  
+            fclose(dst);  
+            printf("数据库备份成功完成。\n");  
+            fclose(src);  
         }  
         
-        // Sleep until next update  
+    generate_html:  
+        printf("正在生成HTML...\n");  
+        if (generate_html(&config)) {  
+            printf("HTML成功生成于 %s\n", config.html_path);  
+        } else {  
+            fprintf(stderr, "生成HTML失败。\n");  
+        }  
+        
+        // 等待下一次更新  
         sleep(config.recycle_time * 60);  
     }  
     
     return 0;  
 }  
+
 // Generate HTML for popular documents  
 void generate_popular_documents_html(FILE *fp, sqlite3 *db, Config *config) {  
     fprintf(fp, "<div x-show=\"currentView === 'popular'\" class=\"w-full\">\n");  
@@ -745,31 +812,32 @@ void generate_group_rankings_html(FILE *fp, sqlite3 *db, Config *config) {
 }  
 
 // Generate the complete HTML page  
+// 生成完整的HTML页面  
 bool generate_html(Config *config) {  
     sqlite3 *db;  
     
-    // Open database  
-    if (sqlite3_open(config->db_path, &db) != SQLITE_OK) {  
-        fprintf(stderr, "Cannot open database: %s\n", sqlite3_errmsg(db));  
+    // 打开备份数据库  
+    if (sqlite3_open(config->backup_db_path, &db) != SQLITE_OK) {  
+        fprintf(stderr, "无法打开备份数据库: %s\n", sqlite3_errmsg(db));  
         sqlite3_close(db);  
         return false;  
     }  
     
-    // Open output file  
+    // 打开输出文件  
     FILE *fp = fopen(config->html_path, "w");  
     if (!fp) {  
-        fprintf(stderr, "Cannot open output file: %s\n", config->html_path);  
+        fprintf(stderr, "无法打开输出文件: %s\n", config->html_path);  
         sqlite3_close(db);  
         return false;  
     }  
     
-    // Get current time  
+    // 获取当前时间  
     time_t t = time(NULL);  
     struct tm *tm_info = localtime(&t);  
     char timestamp[64];  
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", tm_info);  
     
-    // Write HTML header  
+    // 写入HTML头部  
     fprintf(fp, "<!DOCTYPE html>\n");  
     fprintf(fp, "<html lang=\"zh-CN\">\n");  
     fprintf(fp, "<head>\n");  
@@ -789,13 +857,13 @@ bool generate_html(Config *config) {
     fprintf(fp, "  groupType: 'specified'\n");  
     fprintf(fp, "}\" class=\"container mx-auto px-4 py-8\">\n");  
     
-    // Header  
+    // 页头  
     fprintf(fp, "  <header class=\"bg-white shadow-md rounded-lg p-6 mb-6\">\n");  
     fprintf(fp, "    <h1 class=\"text-3xl font-bold text-gray-800 mb-2\">MinDoc 文档统计排名</h1>\n");  
     fprintf(fp, "    <p class=\"text-gray-600\">数据更新时间: %s</p>\n", timestamp);  
     fprintf(fp, "  </header>\n");  
     
-    // Navigation  
+    // 导航  
     fprintf(fp, "  <nav class=\"bg-white shadow-md rounded-lg p-4 mb-6 sticky top-0 z-10\">\n");  
     fprintf(fp, "    <div class=\"flex space-x-4\">\n");  
     fprintf(fp, "      <button @click=\"currentView = 'latest'\" :class=\"currentView === 'latest' ? 'bg-blue-600 text-white' : 'bg-gray-200'\" class=\"px-4 py-2 rounded-lg\">最新更新文档</button>\n");  
@@ -805,10 +873,10 @@ bool generate_html(Config *config) {
     fprintf(fp, "    </div>\n");  
     fprintf(fp, "  </nav>\n");  
     
-    // Main content  
+    // 主要内容  
     fprintf(fp, "  <main class=\"bg-white shadow-md rounded-lg p-6\">\n");  
     
-    // Generate content for each view  
+    // 生成各视图的内容  
     generate_latest_documents_html(fp, db, config);  
     generate_popular_documents_html(fp, db, config);  
     generate_user_rankings_html(fp, db, config);  
@@ -816,7 +884,7 @@ bool generate_html(Config *config) {
     
     fprintf(fp, "  </main>\n");  
     
-    // Footer  
+    // 页脚  
     fprintf(fp, "  <footer class=\"mt-8 text-center text-gray-600 text-sm\">\n");  
     fprintf(fp, "    <p>© %d MinDoc文档统计排名生成器</p>\n", tm_info->tm_year + 1900);  
     fprintf(fp, "  </footer>\n");  

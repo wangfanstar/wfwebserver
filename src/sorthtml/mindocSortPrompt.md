@@ -92,7 +92,7 @@ CREATE TABLE `md_document_history` (
 提供以下内容
 
 1、最新更新的文档（默认打开显示的视图）
-按md_document_history.modify_time日期排序最新更新的100篇文档，文档链接，文档作者信息 account（real_name）, 最后修改者信息md_documents.modify_at account（real_name） book名称 阅读次数 文档最后更新时间md_documents.modify_time
+按md_document_history.modify_time日期排序最新更新的100篇文档，序号文档链接，文档作者信息 account（real_name）, 最后修改者信息md_documents.modify_at account（real_name） book名称 阅读次数 文档最后更新时间md_documents.modify_time
 
 2、最受欢迎文档
 按所有时间，过去一个月，过去一周提供view_count排名的100篇文档，文档链接，文档作者信息 account（real_name）, book名称，最后修改者信息md_documents.modify_at account（real_name） 文档最后更新时间
