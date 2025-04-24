@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux同步原语对比 - RCU</title>
+    <link rel="stylesheet" href="../tailwind.min.css">  
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+        }
+        .content {
+            margin-left: 250px;
+            padding: 20px;
+            width: calc(100% - 250px);
+        }
+        .sidebar-header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #34495e;
+        }
+        .nav-link {
+            display: block;
+            padding: 15px 20px;
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        .nav-link:hover {
+            background-color: #34495e;
+        }
+        .active {
+            background-color: #3498db;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .card-header {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+        }
+        .card-body {
+            padding: 20px;
+        }
+        .note-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre;
+            overflow-x: auto;
+            line-height: 1.5;
+            margin: 15px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .comparison-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        .comparison-half {
+            flex: 1;
+            min-width: 300px;
+        }
+        .comparison-title {
+            background-color: #2c3e50;
+            color: white;
+            padding: 10px 15px;
+            font-weight: bold;
+            border-radius: 4px 4px 0 0;
+        }
+        .quote-box {
+            background-color: #f0f7ff;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="sidebar">
+        <div class="sidebar-header">  
+    <a href="./linux_sync_short.html" class="block">  
+        <h2 class="text-xl font-bold hover:text-blue-600 transition-colors">Linux同步原语简要版</h2>  
+    </a>  
+</div>
+        <nav>
+            <a href="linux_sync.html" class="nav-link">首页</a>
+            <a href="mutex.html" class="nav-link">互斥锁 (Mutex)</a>
+            <a href="rwlock.html" class="nav-link">读写锁 (RWLock)</a>
+            <a href="spinlock.html" class="nav-link">自旋锁 (Spinlock)</a>
+            <a href="atomic.html" class="nav-link">原子操作 (Atomic)</a>
+            <a href="semaphore.html" class="nav-link">信号量 (Semaphore)</a>
+            <a href="rcu.html" class="nav-link active">RCU</a>
+            <a href="seqlock.html" class="nav-link">顺序锁 (Seqlock)</a>
+            <a href="barrier.html" class="nav-link">内存屏障 (Barrier)</a>
+            <a href="rwbarrier.html" class="nav-link">读写屏障 (RW Barrier)</a>
+        </nav>
+    </div>
+
+    <div class="content">
+        <h1 class="text-3xl font-bold mb-6">RCU (Read-Copy-Update)</h1>
+        
+        <div class="card mb-8">
+            <div class="card-header">
+                RCU概述
+            </div>
+            <div class="card-body">
+                <p>RCU（Read-Copy-Update）是一种同步机制，专为读多写少的场景设计。它允许多个读取者并发访问共享数据，而无需获取锁或进行原子操作，同时允许写入者对共享数据进行更新。</p>
+                <p class="mt-3">RCU的核心理念：</p>
+                <ul class="list-disc pl-6 mt-2">
+                    <li>读取者无锁访问，性能极高</li>
+                    <li>写入者先复制一份数据，在副本上修改，然后原子替换指针</li>
+                    <li>通过宽限期（grace period）机制保证所有读取者完成访问后再释放旧数据</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card mb-8">
+            <div class="card-header">
+                用户态与内核态RCU对比
+            </div>
+            <div class="card-body">
+                <div class="comparison-container">
+                    <div class="comparison-half">
+                        <div class="comparison-title">用户态RCU (liburcu)</div>
+                        <div class="p-4 bg-white">
+                            <h3 class="font-bold">头文件</h3>
+                            <pre class="code-block">#include &lt;urcu.h&gt;           // 基本RCU操作
+#include &lt;urcu-qsbr.h&gt;       // QSBR风格RCU
+#include &lt;urcu-mb.h&gt;         // 内存屏障RCU
+#include &lt;urcu-bp.h&gt;         // 引导保护RCU
+#include &lt;urcu/rculist.h&gt;    // RCU链表
+</pre>
+
+                            <h3 class="font-bold mt-4">基本函数</h3>
+                            <p class="mt-2"><code>rcu_register_thread()</code> - 注册当前线程为RCU读取者</p>
+                            <p class="mt-1"><code>rcu_unregister_thread()</code> - 取消注册当前线程</p>
+                            <p class="mt-1"><code>rcu_read_lock()</code> - 开始一个读访问临界区</p>
+                            <p class="mt-1"><code>rcu_read_unlock()</code> - 结束一个读访问临界区</p>
+                            <p class="mt-1"><code>rcu_dereference()</code> - 获取RCU保护的指针，用于读取</p>
+                            <p class="mt-1"><code>rcu_assign_pointer()</code> - 更新RCU保护的指针</p>
+                            <p class="mt-1"><code>synchronize_rcu()</code> - 等待所有先前的读访问完成</p>
+                            <p class="mt-1"><code>call_rcu()</code> - 异步等待所有读访问完成后执行回调</p>
+
+                            <h3 class="font-bold mt-4">使用示例</h3>
+                            <pre class="code-block">// 初始化
+#include &lt;urcu.h&gt;
+
+struct my_data {
+    int value;
+};
+
+struct my_data *global_ptr = NULL;
+
+// 读取者
+void reader(void)
+{
+    struct my_data *ptr;
+    
+    rcu_register_thread();
+    
+    rcu_read_lock();
+    ptr = rcu_dereference(global_ptr);
+    if (ptr)
+        printf("Value: %d\n", ptr->value);
+    rcu_read_unlock();
+    
+    rcu_unregister_thread();
+}
+
+// 更新者
+void updater(int new_value)
+{
+    struct my_data *new_data, *old_data;
+    
+    new_data = malloc(sizeof(*new_data));
+    new_data->value = new_value;
+    
+    old_data = rcu_dereference(global_ptr);
+    rcu_assign_pointer(global_ptr, new_data);
+    
+    synchronize_rcu();
+    free(old_data);  // 安全释放旧数据
+}</pre>
+                        </div>
+                    </div>
+                    <div class="comparison-half">
+                        <div class="comparison-title">内核态RCU</div>
+                        <div class="p-4 bg-white">
+                            <h3 class="font-bold">头文件</h3>
+                            <pre class="code-block">#include &lt;linux/rcupdate.h&gt;   // 基本RCU操作
+#include &lt;linux/rculist.h&gt;     // RCU链表
+#include &lt;linux/srcu.h&gt;        // 睡眠安全RCU
+#include &lt;linux/rcutree.h&gt;     // RCU树实现相关
+</pre>
+
+                            <h3 class="font-bold mt-4">基本函数</h3>
+                            <p class="mt-2"><code>rcu_read_lock()</code> - 开始一个RCU读访问临界区</p>
+                            <p class="mt-1"><code>rcu_read_unlock()</code> - 结束一个RCU读访问临界区</p>
+                            <p class="mt-1"><code>rcu_dereference()</code> - 获取RCU保护的指针</p>
+                            <p class="mt-1"><code>rcu_assign_pointer()</code> - 更新RCU保护的指针</p>
+                            <p class="mt-1"><code>synchronize_rcu()</code> - 同步等待RCU宽限期</p>
+                            <p class="mt-1"><code>synchronize_rcu_expedited()</code> - 快速但代价更高的宽限期等待</p>
+                            <p class="mt-1"><code>call_rcu()</code> - 在RCU宽限期后执行回调</p>
+                            <p class="mt-1"><code>kfree_rcu()</code> - 在RCU宽限期后释放内存</p>
+
+                            <h3 class="font-bold mt-4">使用示例</h3>
+                            <pre class="code-block">// 内核模块中
+#include &lt;linux/rcupdate.h&gt;
+#include &lt;linux/slab.h&gt;
+
+struct my_data {
+    int value;
+};
+
+struct my_data __rcu *global_ptr = NULL;
+
+// 读取者
+static void reader(void)
+{
+    struct my_data *ptr;
+    
+    rcu_read_lock();
+    ptr = rcu_dereference(global_ptr);
+    if (ptr)
+        pr_info("Value: %d\n", ptr->value);
+    rcu_read_unlock();
+}
+
+// 更新者
+static void updater(int new_value)
+{
+    struct my_data *new_data, *old_data;
+    
+    new_data = kmalloc(sizeof(*new_data), GFP_KERNEL);
+    if (!new_data)
+        return;
+        
+    new_data->value = new_value;
+    
+    old_data = rcu_dereference(global_ptr);
+    rcu_assign_pointer(global_ptr, new_data);
+    
+    if (old_data)
+        kfree_rcu(old_data, rcu);  // 在RCU宽限期后自动释放
+}</pre>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-8">
+            <div class="card-header">
+                特殊变体对比
+            </div>
+            <div class="card-body">
+                <div class="comparison-container">
+                    <div class="comparison-half">
+                        <div class="comparison-title">用户态RCU变体</div>
+                        <div class="p-4 bg-white">
+                            <h3 class="font-bold">QSBR (Quiescent State Based Reclamation)</h3>
+                            <p>适用于：线程持续运行的场景，性能最好</p>
+                            <pre class="code-block">#include &lt;urcu-qsbr.h&gt;
+
+// 需要定期调用
+rcu_quiescent_state();
+
+// 或在较长操作里显式标记
+rcu_thread_offline();
+/* 较长的不访问RCU保护数据的操作 */
+rcu_thread_online();</pre>
+
+                            <h3 class="font-bold mt-4">Memory Barrier RCU</h3>
+                            <p>使用内存屏障实现，适用于通用场景</p>
+                            <pre class="code-block">#include &lt;urcu-mb.h&gt;</pre>
+
+                            <h3 class="font-bold mt-4">Signal-based RCU</h3>
+                            <p>使用信号机制实现，是liburcu的默认选择</p>
+                            <pre class="code-block">#include &lt;urcu.h&gt;</pre>
+
+                            <h3 class="font-bold mt-4">Bulletproof RCU</h3>
+                            <p>不需要显式线程注册/注销</p>
+                            <pre class="code-block">#include &lt;urcu-bp.h&gt;</pre>
+                        </div>
+                    </div>
+                    <div class="comparison-half">
+                        <div class="comparison-title">内核态RCU变体</div>
+                        <div class="p-4 bg-white">
+                            <h3 class="font-bold">Sleepable RCU (SRCU)</h3>
+                            <p>适用于：需要在RCU读临界区内休眠的场景</p>
+                            <pre class="code-block">#include &lt;linux/srcu.h&gt;
+
+struct srcu_struct my_srcu;
+srcu_init(&my_srcu);
+
+// 读者
+int idx = srcu_read_lock(&my_srcu);
+/* 可以在RCU读临界区内休眠 */
+srcu_read_unlock(&my_srcu, idx);
+
+// 写者
+synchronize_srcu(&my_srcu);
+// 或
+call_srcu(&my_srcu, callback_fn);</pre>
+
+                            <h3 class="font-bold mt-4">Tasks RCU</h3>
+                            <p>特别为任务调度器设计的RCU变体</p>
+                            <pre class="code-block">// 使用示例
+rcu_read_lock_tasks();
+/* 读取任务相关数据 */
+rcu_read_unlock_tasks();
+
+// 写者
+synchronize_rcu_tasks();</pre>
+
+                            <h3 class="font-bold mt-4">Tiny RCU</h3>
+                            <p>针对单处理器系统优化的轻量级RCU实现</p>
+                                
+                            <h3 class="font-bold mt-4">RCU-PREEMPT</h3>
+                            <p>针对可抢占内核优化的RCU实现，是主流内核的默认选择</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-8">
+            <div class="card-header">
+                使用场景与注意事项
+            </div>
+            <div class="card-body">
+                <h3 class="font-bold">最适合RCU的场景</h3>
+                <ul class="list-disc pl-6 mt-2">
+                    <li>读多写少的场景（典型读写比例为100:1或更高）</li>
+                    <li>数据结构的更新是替换而非修改</li>
+                    <li>需要极高的读取性能，且可接受写入有少量开销</li>
+                    <li>读取路径需要避免任何锁开销</li>
+                    <li>经典用例：路由表查找、设备状态表、缓存等</li>
+                </ul>
+
+                <h3 class="font-bold mt-4">重要限制与注意事项</h3>
+                <ul class="list-disc pl-6 mt-2">
+                    <li>RCU读取者不得修改被保护的数据结构</li>
+                    <li>一般不适用于对称读写比例的场景</li>
+                    <li>需要注意内存使用效率（写入需要复制数据）</li>
+                    <li>在用户态，必须显式处理线程注册与读临界区</li>
+                    <li>在内核中，<code>rcu_read_lock()</code>下不能使用可能导致睡眠的函数（除非使用SRCU）</li>
+                    <li>需要特别注意RCU指针的NULL检查和生命周期</li>
+                </ul>
+
+                <div class="note-box mt-6">
+                    <h4 class="font-bold">常见错误</h4>
+                    <ol class="list-decimal pl-6 mt-2">
+                        <li>读临界区内修改被RCU保护的数据</li>
+                        <li>忘记使用<code>rcu_assign_pointer()</code>和<code>rcu_dereference()</code></li>
+                        <li>过早释放RCU保护的内存</li>
+                        <li>在用户态未正确注册线程</li>
+                        <li>在RCU读临界区持有时间过长</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-8">
+            <div class="card-header">
+                RCU的实现原理与设计思想
+            </div>
+            <div class="card-body">
+                <div class="quote-box">
+                    <p>RCU的本质是一种读写分离的乐观锁策略，它体现了Linux内核设计的精髓——让常见路径快速无阻碍，让罕见路径承担复杂性。</p>
+                </div>
+                
+                <h3 class="font-bold mt-4">为什么RCU如此之快？</h3>
+                <p class="mt-2">
+                    读者路径几乎零开销，没有锁、没有原子操作、没有内存屏障（在某些实现中）。这是通过引入时间维度上的隔离实现的——读者只需声明"我正在读"，然后直接读取，不需要等待任何人。相比之下，写者则承担了协调一致性的全部负担。
+                </p>
+                
+                <p class="mt-3">
+                    这种不对称设计是RCU的灵魂，它打破了传统的"所有人都必须看到一致数据"的限制，转而为："写者需要保证读者看到一致数据，但读者可能看到旧数据或新数据"。这种宽松的一致性模型带来了极致的性能。
+                </p>
+                
+                <h3 class="font-bold mt-4">RCU与引用计数的对决</h3>
+                <p class="mt-2">
+                    很多人习惯用引用计数管理共享资源，但引用计数有个致命弱点：需要原子操作。每次读取都要原子递增、递减计数，在高并发下成为瓶颈。
+                </p>
+                
+                <p class="mt-3">
+                    RCU则转换了思路：不再问"有多少人在用这个资源"，而是问"所有可能使用此资源的人都离开了吗"。这种从精确计数到宽限期的转变，消除了原子操作的需要。
+                </p>
+                
+                <h3 class="font-bold mt-4">RCU的三大支柱</h3>
+                <ol class="list-decimal pl-6 mt-2">
+                    <li><strong>发布-订阅机制</strong>：使用<code>rcu_assign_pointer()</code>和<code>rcu_dereference()</code>保证指针更新的安全发布与获取</li>
+                    <li><strong>宽限期</strong>：找到一个时间点，此时确保所有读者都不再访问旧数据</li>
+                    <li><strong>存储回收</strong>：在宽限期后安全释放旧数据</li>
+                </ol>
+                
+                <p class="mt-4">
+                    内核RCU的实现天才之处在于利用了内核自身的特性：进程调度。每个CPU上的任务被调度出去，或者进入用户态，自然形成了静止点。通过跟踪这些静止点，内核可以确定何时所有CPU都经历了调度，因此所有读者都必然结束了读操作。这个设计将RCU的开销几乎完全隐藏在了系统的自然行为中。
+                </p>
+                
+                <div class="quote-box mt-6">
+                    <p>RCU不是魔法，它只是放弃了一些我们习以为常但其实不总是必需的保证，从而获得了性能。它提醒我们：有时候，适当放松一致性要求，反而能得到更优雅的解决方案。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>

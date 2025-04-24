@@ -1,0 +1,1591 @@
+
+<!DOCTYPE html>  
+<html lang="zh-CN">  
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+    <title>C语言测验3 - 100题</title>  
+    <!-- 本地样式和脚本文件 -->  
+    <link href="../tailwind.min.css" rel="stylesheet">  
+    <script src="../alpine.min.js" defer></script>  
+    <style>  
+        .question {  
+            border-bottom: 1px solid #e2e8f0;  
+            padding-bottom: 1.5rem;  
+            margin-bottom: 1.5rem;  
+        }  
+        .correct {  
+            color: #059669;  
+            font-weight: bold;  
+        }  
+        .incorrect {  
+            color: #dc2626;  
+            font-weight: bold;  
+        }  
+        .explanation {  
+            background-color: #f8fafc;  
+            border-left: 4px solid #3b82f6;  
+            padding: 1rem;  
+            margin-top: 1rem;  
+        }  
+        .sidebar {  
+            position: sticky;  
+            top: 20px;  
+            height: calc(100vh - 40px);  
+            overflow-y: auto;  
+        }  
+        @media print {  
+            .no-print {  
+                display: none;  
+            }  
+            .print-break {  
+                page-break-before: always;  
+            }  
+        }  
+    </style>  
+</head>  
+<body class="bg-gray-50">  
+    <div x-data="quizApp()" class="container mx-auto px-4 py-8">  
+        <header class="text-center mb-10">  
+            <div class="mx-auto w-24 h-24 mb-4">  
+                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">  
+                    <path d="M70 20H30C24.4772 20 20 24.4772 20 30V70C20 75.5228 24.4772 80 30 80H70C75.5228 80 80 75.5228 80 70V30C80 24.4772 75.5228 20 70 20Z" fill="#3B82F6"/>  
+                    <path d="M50 25C36.1929 25 25 36.1929 25 50C25 63.8071 36.1929 75 50 75C63.8071 75 75 63.8071 75 50C75 36.1929 63.8071 25 50 25Z" fill="white"/>  
+                    <path d="M50 30C38.9543 30 30 40.9543 30 55C30 69.0457 38.9543 80 50 80C61.0457 80 70 69.0457 70 55C70 40.9543 61.0457 30 50 30Z" fill="#3B82F6"/>  
+                    <text x="50" y="60" font-family="Arial" font-size="24" font-weight="bold" fill="white" text-anchor="middle">C</text>  
+                    <path d="M75 30H80L85 35V40H80V35H75V30Z" fill="#FFA55F"/>  
+                    <path d="M25 70H20L15 65V60H20V65H25V70Z" fill="#FFA55F"/>  
+                </svg>  
+            </div>  
+            <h1 class="text-3xl font-bold text-gray-800">C语言编程测验3</h1>  
+            <p class="text-gray-600 mt-2">约150道选择题，答题后点击"检查答案"查看结果和解析</p>  
+        </header>  
+
+        <div class="flex flex-col md:flex-row gap-8">  
+            <!-- 左侧边栏：固定进度和统计信息 -->  
+            <div class="w-full md:w-1/4 lg:w-1/5 no-print">  
+                <div class="sidebar bg-white rounded-lg shadow-md p-4">  
+                    <h2 class="text-lg font-medium text-gray-900 mb-4">测验进度</h2>  
+                    
+                    <div class="progress-bar mb-6">  
+                        <div class="flex justify-between mb-1">  
+                            <span class="text-sm font-medium text-blue-700">完成题目</span>  
+                            <span class="text-sm font-medium text-blue-700" x-text="answeredCount + ' / ' + questions.length"></span>  
+                        </div>  
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">  
+                            <div class="bg-blue-600 h-2.5 rounded-full" :style="'width: ' + (answeredCount / questions.length * 100) + '%'"></div>  
+                        </div>  
+                    </div>  
+                    
+                    <div class="stats space-y-4 mb-8">  
+                        <div class="stat bg-gray-50 rounded-lg p-3">  
+                            <div class="text-sm text-gray-600">正确答案</div>  
+                            <div class="text-2xl font-bold text-green-600" x-text="correctCount"></div>  
+                        </div>  
+                        <div class="stat bg-gray-50 rounded-lg p-3">  
+                            <div class="text-sm text-gray-600">错误答案</div>  
+                            <div class="text-2xl font-bold text-red-600" x-text="incorrectCount"></div>  
+                        </div>  
+                        <div class="stat bg-gray-50 rounded-lg p-3">  
+                            <div class="text-sm text-gray-600">准确率</div>  
+                            <div class="text-2xl font-bold text-blue-600" x-text="accuracyRate + '%'"></div>  
+                        </div>  
+                    </div>  
+                    
+                    <div class="jump-to-section">  
+                        <h3 class="text-md font-medium text-gray-900 mb-2">快速跳转</h3>  
+                        <div class="grid grid-cols-5 gap-1">  
+                            <template x-for="i in 30">  
+                                <button class="py-1 text-xs rounded hover:bg-blue-100"   
+                                        :class="getJumpButtonClass((i-1)*5+1)"  
+                                        @click="scrollToQuestion((i-1)*5+1)">  
+                                    <span x-text="(i-1)*5+1"></span>-<span x-text="i*5"></span>  
+                                </button>  
+                            </template>  
+                        </div>  
+                    </div>  
+                    
+                    <div class="mt-8">  
+                        <button @click="printResults()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">  
+                            打印测验结果  
+                        </button>  
+                    </div>  
+                </div>  
+            </div>  
+            
+            <!-- 右侧主要内容：题目列表 -->  
+            <div class="w-full md:w-3/4 lg:w-4/5">  
+                <div class="bg-white rounded-lg shadow-md p-6">  
+                    <template x-for="(question, index) in questions" :key="index">  
+                        <div class="question" :id="'question-' + (index + 1)" :class="{'print-break': index > 0 && index % 5 === 0}">  
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">  
+                                <span x-text="(index + 1) + '.'"></span>  
+                                <span x-html="question.text"></span>  
+                            </h3>  
+                            <div class="options grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">  
+                                <template x-for="(option, optIndex) in ['A', 'B', 'C', 'D']" :key="optIndex">  
+                                    <div class="flex items-start">  
+                                        <input type="radio" :id="'q' + (index + 1) + option" :name="'question' + (index + 1)" :value="option"   
+                                               x-model="question.userAnswer"   
+                                               class="mt-1 mr-2">  
+                                        <label :for="'q' + (index + 1) + option" class="text-gray-700" x-html="question.options[optIndex]"></label>  
+                                    </div>  
+                                </template>  
+                            </div>  
+                            <div class="flex items-center">  
+                                <button @click="checkAnswer(index)"   
+                                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1 px-4 rounded no-print"  
+                                        :disabled="question.checked"  
+                                        :class="{'opacity-50 cursor-not-allowed': question.checked}">  
+                                    检查答案  
+                                </button>  
+                                <div x-show="question.checked" class="ml-4" :class="question.userAnswer === question.correctAnswer ? 'correct' : 'incorrect'">  
+                                    <span x-show="question.userAnswer === question.correctAnswer">✓ 正确答案！</span>  
+                                    <span x-show="question.userAnswer !== question.correctAnswer">✗ 错误。正确答案是: <span x-text="question.correctAnswer"></span></span>  
+                                </div>  
+                            </div>  
+                            <div x-show="question.checked && question.explanation" class="explanation mt-2" x-html="question.explanation"></div>  
+                        </div>  
+                    </template>  
+                </div>  
+            </div>  
+        </div>  
+    </div>  
+
+    <!-- 这里是关键修改：使用script标签定义问题数据 -->
+    <script id="questionData" type="text/plain">
+{  
+    text: '以下叙述中正确的是（）。',  
+    options: ['全局变量的作用域一定比局部变量的作用域范围大', '静态(static)类别变量的生存期贯穿于整个程序的运行期间', '函数的形参都属于全局变量', '未在定义语句中赋初值的auto变量和static变量的初值都是随机值'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '静态(static)类别变量的生存期确实贯穿于整个程序的运行期间。全局变量的作用域虽然大，但有例外情况；函数的形参是局部变量，不是全局变量；未初始化的static变量初值为0，而auto变量初值为随机值。'  
+},  
+{  
+    text: '以下正确的说法是（）。',  
+    options: ['用户若需调用标准库函数，调用前必须重新定义', '用户可以重新定义标准库函数，若如此，该函数将失去原有含义', '系统根本不允许用户重新定义标准库函数', '用户若需调用标准库函数，调用前不必使用预编译命令将该函数所在文件包括到用户源文件中，系统自动去调'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '用户可以重新定义标准库函数，这会导致原标准库函数失去原有含义，因为用户定义的同名函数会覆盖标准库函数。调用标准库函数通常需要包含相应的头文件，而不需要重新定义函数。'  
+},  
+{  
+    text: '若用数组名作为函数的实参，传递给形参的是（）。',  
+    options: ['数组的首地址', '数组第一个元素的值', '数组中全部元素的值', '数组元素的个数'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C语言中，当数组名作为函数的实参时，传递给形参的是数组的首地址，而不是数组的内容或元素个数。这是C语言中数组参数传递的特性。'  
+},  
+{  
+    text: '以下正确的说法是（）。',  
+    options: ['定义函数时,形参的类型说明可以放在函数体内', 'return后边的值不能为表达式', '如果函数值的类型与返回值类型不一致，以函数值类型为准', '如果形参与实参类型不一致，以实参类型为准'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '如果函数值的类型与返回值类型不一致，系统会按照函数值类型进行转换。形参的类型说明必须在函数头部，不能放在函数体内。return后可以跟表达式。如果形参与实参类型不一致，会按照形参类型进行转换。'  
+},  
+{  
+    text: 'C语言允许函数类型缺省定义，此时函数值隐含的类型是（）。',  
+    options: ['float', 'int', 'long', 'double'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C语言中，如果没有明确指定函数的返回类型，编译器会默认函数返回int类型。这是C语言的缺省类型规则。'  
+},  
+{  
+    text: 'C语言规定，函数返回值的类型是由（）。',  
+    options: ['return语句中的表达式类型所决定', '调用该函数时的主调函数类型所决定', '调用该函数时系统临时决定', '在定义该函数时所指定的函数类型所决定'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '函数返回值的类型是由函数定义时所指定的类型决定的，不是由return语句中的表达式类型或调用环境决定。如果return语句中的表达式类型与函数定义的返回类型不一致，会进行类型转换以匹配函数的返回类型。'  
+},  
+{  
+    text: '以下错误的描述是：函数调用可以（）。',  
+    options: ['出现在执行语句中', '出现在一个表达式中', '做为一个函数的实参', '做为一个函数的形参'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '函数调用不能作为一个函数的形参。函数调用可以出现在执行语句中、表达式中，也可以作为另一个函数的实参，但不能作为形参。形参是函数定义时的占位符，而函数调用是一个运行时的操作。'  
+},  
+{  
+    text: '关于建立函数的目的，以下正确的说法是（）。',  
+    options: ['提高程序的执行效率', '提高程序的可读性', '减少程序的篇幅', '减少程序文件所占内存'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '建立函数的主要目的是提高程序的可读性和可维护性，通过模块化编程使代码更加清晰。函数可能会引入调用开销，不一定提高执行效率；虽然可能减少代码重复，但带来的函数调用开销可能不会减少内存占用。'  
+},  
+{  
+    text: '以下只有在使用时才为该类型变量分配内存的存储类说明是（）。',  
+    options: ['auto和 static', 'auto和 register', 'register和 static', 'extern和 register'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'auto和register类型的变量只在使用时才分配内存。auto变量在函数调用时分配内存，函数结束时释放；register变量请求存储在CPU寄存器中（不一定成功）。static变量在程序开始时就分配内存并保持到程序结束。extern只是声明变量在其他地方已定义，不分配新内存。'  
+},  
+{  
+    text: '若已定义的函数有返回值，则以下关于该函数调用的叙述中错误的是（）。',  
+    options: ['函数调用可以作为独立的语句存在', '函数调用可以作为一个函数的实参', '函数调用可以出现在表达式中', '函数调用可以作为一个函数的形参'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '函数调用不能作为函数的形参。形参是在函数定义时声明的变量，用于接收函数调用时传递的值。函数调用是在运行时执行的操作，它可以作为独立语句、实参或表达式的一部分，但不能作为形参。'  
+},  
+{  
+    text: '当调用函数时，实参是一个数组名，则向函数传送的是（）。',  
+    options: ['数组的长度', '数组的首地址', '数组每一个元素的地址', '数组每个元素中的值'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C语言中，当数组名作为函数的实参时，传递给函数的是数组的首地址（即数组第一个元素的地址），而不是数组的内容或长度。这也是为什么在函数内部可以修改原数组元素的原因。'  
+},  
+{  
+    text: '在C语言中，形参的缺省存储类别是（）。',  
+    options: ['auto', 'register', 'static', 'extern'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C语言中，函数形参的缺省存储类别是auto，意味着这些参数在函数被调用时分配内存，函数返回时释放内存。这符合形参的临时性特点。'  
+},  
+{  
+    text: '在调用函数时，如果实参是简单变量，它与对应形参之间的数据传递方式是',  
+    options: ['地址传递', '单向值传递', '由实参传给形参，再由形参传回实参', '传递方式由用户指定'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言中，如果实参是简单变量（非数组或指针），那么它与形参之间的数据传递方式是单向值传递，即将实参的值复制给形参，形参的改变不会影响实参的值。这也称为"传值调用"。'  
+},  
+{  
+    text: '以下运算符中优先级最低的是（）。',  
+    options: ['&&', '&', '||', '|'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C语言运算符优先级中，|| (逻辑或)的优先级最低。优先级从高到低依次是：& (按位与) > && (逻辑与) > | (按位或) > || (逻辑或)。'  
+},  
+{  
+    text: '在C语言中，要求运算数必须是整型或字符型的运算符是（）。',  
+    options: ['&&', '&', '!', '||'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '& (按位与)运算符要求操作数必须是整型或字符型，因为它进行的是位操作。而逻辑运算符&&、!、||可以应用于任何类型的表达式，它们会将非零值视为真，零值视为假。'  
+},  
+{  
+    text: '在C语言中，要求运算数必须是整型的运算符是（）。',  
+    options: ['^', '%', '!', '>'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '% (取模)运算符的操作数必须是整型，它返回除法的余数。^ (按位异或)可以用于整型和字符型，! (逻辑非)和> (大于)可以用于任何类型的表达式。'  
+},  
+{  
+    text: '在位运算中，操作数每左移一位，其结果相当于（）。',  
+    options: ['操作数乘以2', '操作数除以2', '操作数除以4', '操作数乘以4'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在位运算中，整数每左移一位(<<1)相当于将该数乘以2。例如：5<<1的结果是10，相当于5*2。相应地，右移一位(>>1)相当于除以2（向下取整）。'  
+},  
+{  
+    text: '表达式，0x13&0x17的值是（）。',  
+    options: ['0x17', '0x13', '0xf8', '0xec'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '计算0x13&0x17：0x13的二进制是00010011，0x17的二进制是00010111。按位与操作后得到00010011，即0x13。按位与操作规则：只有两个操作数的对应位都为1时，结果位才为1，否则为0。'  
+},  
+{  
+    text: '若a=1,b=2则 a|b的值是（）。',  
+    options: ['0', '1', '2', '3'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '计算a|b：a=1的二进制是01，b=2的二进制是10。按位或操作后得到11，即十进制的3。按位或操作规则：只要两个操作数的对应位有一个为1，结果位就为1，只有两个都为0时，结果位才为0。'  
+},  
+{  
+    text: '以下叙述中不正确的是（）。',  
+    options: ['预处理命令行都必须以#号开始', '在程序中凡是以#号开始的语句行都是预处理命令行', '程序在执行过程中对预处理命令行进行处理', '以下是正确的宏定义 #define IBM_PC'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '预处理命令在程序编译前进行处理，而不是在程序执行过程中。预处理是编译过程的第一个阶段，此时处理所有以#开头的预处理指令，如#include、#define等，然后再进行编译。'  
+},  
+{  
+    text: '设char型变量x中的值为10100111，则表达式(2+x)^(~3)的值是（）。',  
+    options: ['10101001', '10101000', '11111101', '01010101'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '首先计算(2+x): x是10100111，转为十进制为167，加上2得169，二进制为10101001。\n然后计算(~3): 3的二进制是11，按位取反得11111...100（前面是一连串的1）。\n最后，10101001 ^ 11111...100 = 01010101。按位异或操作规则：两个操作数的对应位相同时结果为0，不同时结果为1。'  
+},  
+{  
+    text: '若要说明一个类型名STP，使得定义语句STP s等价于char *s，以下选项中正确的是（）。',  
+    options: ['typedef STP char *s;', 'typedef *char STP;', 'typedef stp *char;', 'typedef char* STP;'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '使用typedef定义类型别名的正确语法是：typedef 原类型 新类型名。所以，要使STP等价于char*，正确的定义是typedef char* STP;。这样定义后，STP s就等价于char *s。'  
+},  
+{  
+    text: '以下叙述中正确的是（）。',  
+    options: ['在程序的一行上可以出现多个有效的预处理命令行', '使用带参的宏时,参数的类型应与宏定义时的一致', '宏替换不占用运行时间,只占编译时间', '在以下定义中 C R 是称为"宏名"的标识符 #define C R 045'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '宏替换确实不占用运行时间，只在预处理阶段进行，它是纯文本替换。每个预处理命令应占一行；宏参数没有类型，它只是文本替换；在定义#define C R 045中，C是宏名，而不是"C R"。'  
+},  
+{  
+    text: '以下各选项企图说明一种新的类型名，其中正确的是（）。',  
+    options: ['typedef v1 int;', 'typedef v2=int;', 'typedef int v3;', 'typedef v4: int;'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'typedef的正确语法是：typedef 原类型 新类型名。因此，typedef int v3;是正确的，它定义了一个名为v3的新类型，等价于int。其他选项的语法都不正确。'  
+},  
+{  
+    text: '以下叙述正确的是（）。',  
+    options: ['可以把define和if定义为用户标识符', '可以把define定义为用户标识符,但不能把if定义为用户标识符', '可以把if定义为用户标识符,但不能把define定义为用户标识符', 'define和if都不能定义为用户标识符'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言中，if是关键字，不能被用作标识符。而define不是关键字，而是预处理指令，理论上可以被定义为用户标识符，尽管这么做会导致不能使用#define预处理命令，实际中应避免这样做。'  
+},  
+{  
+    text: '以下叙述中不正确的是（）。',  
+    options: ['表达式a&=b等价于a=a&b', '表达式a|=b等价于a=a|b', '表达式a!=b等价于a=a!b', '表达式a^=b等价于a=a^b'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '表达式a!=b不等价于a=a!b，而是一个比较表达式，判断a是否不等于b。正确的等价关系是：a&=b等价于a=a&b，a|=b等价于a=a|b，a^=b等价于a=a^b。'  
+},  
+{  
+    text: '设 int b=2;表达式(b>>2)/(b>>1)的值是（）。',  
+    options: ['0', '2', '4', '8'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '计算(b>>2)/(b>>1)：b=2，b>>2表示2右移2位，即2/4=0；b>>1表示2右移1位，即2/2=1。因此该表达式值为0/1=0。'  
+},  
+{  
+    text: '若x=2,y=3则x&y的结果是（）。',  
+    options: ['0', '2', '3', '5'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '计算x&y：x=2的二进制是10，y=3的二进制是11。按位与操作得到10，即十进制的2。按位与操作规则：只有两个操作数对应位都为1时，结果位才为1。'  
+},  
+{  
+    text: '整型变量x和y的值相等、且为非0值,则以下选项中，结果为零的表达式是',  
+    options: ['x || y', 'x | y', 'x & y', 'x ^ y'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '当x和y相等且非0时，x^y（按位异或）的结果为0。按位异或操作规则：对应位相同结果为0，不同为1。既然x和y相等，所有位都相同，异或结果全为0。而x||y（逻辑或）、x|y（按位或）、x&y（按位与）的结果都不为0。'  
+},  
+{  
+    text: '下面说明不正确的是（）。',  
+    options: ['char a[10]="china";', 'char a[10],*p=a;p="china"', 'char *a;a="china";', 'char a[10],*p;p=a="china"'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '选项D中，表达式p=a="china"是错误的。在C语言中，不能将字符串直接赋值给数组名a。数组名是常量指针，不能作为赋值语句的左值。正确的做法是使用strcpy()函数或在声明时初始化。'  
+},  
+{  
+    text: '设p1和p2是指向同一个字符串的指针变量，c为字符变量，则以下不能正确执行的赋值语句是（）。',  
+    options: ['c=*p1+*p2;', 'p2=c;', 'p1=p2;', 'c=*p1*(*p2);'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'p2=c是错误的赋值语句。p2是指针变量，需要赋值一个地址，而c是字符变量，存储的是字符值而不是地址。c=*p1+*p2是合法的，将两个字符的ASCII码相加赋给c；p1=p2是合法的指针赋值；c=*p1*(*p2)是合法的，将两个字符的ASCII码相乘赋给c。'  
+},  
+{  
+    text: '设 char *s="\\ta\\017bc";则指针变量s指向的字符串所占的字节数是（）。',  
+    options: ['9', '5', '6', '7'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '字符串"\ta\017bc"包含5个可见字符：制表符\t、字符a、八进制转义字符\017、字符b和字符c，再加上字符串结束符\0，共占用6个字节。'  
+},  
+{  
+    text: '对于基本类型相同的两个指针变量之间，不能进行的运算是（）。',  
+    options: ['<', '=', '+', '-'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '两个指针变量不能相加(+)。指针变量可以比较大小(<)、赋值(=)，两个指针相减(-)可以得到它们之间的元素个数。但两个指针相加没有实际意义，C语言不允许这种操作。'  
+},  
+{  
+    text: '若有以下的定义:int t[3][2];能正确表示t数组元素地址的表达式是（）。',  
+    options: ['&t[3][2]', 't[3]', '&t[1]', 't[2]'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 't[2]表示二维数组t的第3行首地址，是正确的。&t[3][2]错误，因为t只有3行2列，下标越界；t[3]错误，同样是下标越界；&t[1]表示的是t数组第2行的地址，而不是元素地址。'  
+},  
+{  
+    text: '变量的指针，其含义是指该变量的（）。',  
+    options: ['值', '地址', '名', '一个标志'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '变量的指针表示该变量的内存地址。在C语言中，使用&运算符获取变量的地址，而使用*运算符访问指针所指向的变量的值。'  
+},  
+{  
+    text: '若有语句int *point,a=4;和 point=&a;下面均代表地址的一组选项是（）。',  
+    options: ['a,point,*&a', '&*a,&a,*point', '*&point,*point,&a', '&a,&*point,point'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '&a表示变量a的地址；&*point等价于point（取值再取地址抵消）；point本身就存储a的地址。*&a等价于a，是值不是地址；*point等价于a，也是值；&*a非法，因为a不是指针，不能解引用。'  
+},  
+{  
+    text: '若有说明:int *p,m=5,n;以下正确的程序段是（）。',  
+    options: ['p=&n;scanf("%d",&p);', 'p=&n;scanf("%d",*p)', 'scanf("%d",&n);*p=n;', 'p=&n;*p=m;'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'p=&n;*p=m;是正确的，它先将p指向n，再通过*p=m将n的值设为5。选项A错误，&p是p的地址而不是n的地址；选项B错误，*p是n的值，不是地址；选项C错误，因为p未指向任何有效地址就使用*p。'  
+},  
+{  
+    text: '若有说明:int *p1,*p2,m=5,n;以下均是正确赋值语句的选项是（）。',  
+    options: ['p1=&m;p2=&p1', 'p1=&m;p2=&n;*p1=*p2;', 'p1=&m;p2=p1;', 'p1=&m;*p2=*p1;'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'p1=&m;p2=p1;是正确的，p1存储m的地址，p2存储p1的值（即m的地址）。选项A错误，p2=&p1表示p2指向p1，类型不匹配；选项B的*p1=*p2没问题；选项D错误，*p2使用前p2未赋值，可能导致段错误。'  
+},  
+{  
+    text: '下面判断正确的是（）。',  
+    options: ['char *a="china";等价于 char *a;*a="china";', 'char str[10]={"china"};等价于char str[10];str[]={"china"};', 'char *s="china";等价于 char *s;s="china";', 'char c[4]="abc",d[4]="abc";等价于 char c[4]=d[4]="abc";'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'char *s="china";等价于 char *s;s="china"; 是正确的，两种方式都是将字符串"china"的地址赋给指针s。选项A错误，*a="china"试图将字符串赋给单个字符；选项B错误，str[]={"china"}语法错误；选项D错误，C语言不支持连续数组初始化。'  
+},  
+{  
+    text: '若定义:int a=511,*b=&a;, 则printf("%d\n",*b);的输出结果为（）。',  
+    options: ['无确定值', 'a的地址', '512', '511'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '*b表示获取b所指向的变量a的值，即511。b是指向a的指针，存储a的地址，*b解引用操作获取存储在该地址的值。'  
+},  
+{  
+    text: '若有定义:int *p[3];，则以下叙述中正确的是（）。',  
+    options: ['定义了一个基类型为int的指针变量p，该变量具有三个指针', '定义了一个指针数组p，该数组含有三个元素,各元素都是基类型为int的指针', '定义了一个名为*p的整型数组，该数组含有三个int类型元素', '定义了一个可指向一维数组的指针变量p，所指一维数组应具有三个int类型 元素'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'int *p[3]定义了一个指针数组，数组名为p，包含3个元素，每个元素都是int*类型的指针。[]的优先级高于*，所以先与p结合形成数组，然后每个元素是int*类型。'  
+},  
+{  
+    text: '下列选项中正确的语句组是（）。',  
+    options: ['char s[8]; s={"Beijing"};', 'char *s; s={"Beijing"};', 'char s[8]; s="Beijing";', 'char *s; s="Beijing";'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'char *s; s="Beijing";是正确的，将字符串常量"Beijing"的地址赋给指针s。数组名是常量指针，不能作为赋值语句的左值，因此选项A和C都是错误的；选项B中的大括号是不必要的，使用方式错误。'  
+},  
+{  
+    text: '若有说明:int n=2,*p=&n,*q=p;，则以下非法的赋值语句是（）。',  
+    options: ['p=q;', '*p=*q;', 'n=*q;', 'p=n;'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'p=n;是非法的赋值语句，因为p是指针变量，需要存储地址，而n是int类型的变量，不是地址。p=q是将q的值（即n的地址）赋给p；*p=*q是将q指向的值赋给p指向的值；n=*q是将q指向的值赋给n。'  
+},  
+{  
+    text: '在说明语句:int *f();中，标识符f代表的是（）。',  
+    options: ['一个用于指向整型数据的指针变量', '一个用于指向一维数组的行指针', '一个用于指向函数的指针变量', '一个返回值为指针型的函数名'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'int *f()声明了一个名为f的函数，该函数返回int*类型（整型指针）。()表示这是一个函数，而*表示返回值是指针类型。这与其他选项描述的指针变量或数组指针不同。'  
+},  
+{  
+    text: '若有定义:int aa[8];则以下表达式中不能代表数组元aa[1]的地址的是（）。',  
+    options: ['&aa[0]+1', '&aa[1]', '&aa[0]++', 'aa+1'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '&aa[0]++是错误的表达式，因为&aa[0]是一个常量，不能进行自增操作。&aa[0]+1表示数组首地址加1，即aa[1]的地址；&aa[1]直接获取aa[1]的地址；aa+1等价于&aa[0]+1，也是aa[1]的地址。'  
+},  
+{  
+    text: '若有说明:int i, j=2,*p=&i;,则能完成i=j赋值功能的语句是（）。',  
+    options: ['i=*p;', '*p=*&j;', 'i=&j;', 'i=**p;'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '*p=*&j;可以完成i=j的赋值功能。p指向i，所以*p就是i；*&j等价于j，所以*p=*&j等价于i=j。i=*p不正确，因为*p是i本身；i=&j不正确，因为类型不匹配；i=**p不正确，因为p不是二级指针。'  
+},  
+{  
+    text: '设有定义:int n=0,*p=&n,**q=&p;则以下选项中，正确的赋值语句是（）。',  
+    options: ['p=1;', '*q=2;', 'q=p;', '*p=5;'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '*p=5;是正确的赋值语句，将n的值设为5。p=1错误，将整数赋给指针；*q=2错误，因为*q是p，不能将整数赋给指针；q=p错误，因为q是二级指针，p是一级指针，类型不匹配。'  
+},  
+{  
+    text: 'fscanf函数的正确调用形式是（）。',  
+    options: ['fscanf(fp,格式字符串,输出表列);', 'fscanf(格式字符串,输出表列,fp);', 'fscanf(格式字符串,文件指针,输出表列);', 'fscanf(文件指针,格式字符串,输入表列);'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fscanf函数的正确调用形式是fscanf(文件指针,格式字符串,输入表列);。它类似于scanf，但是从指定的文件而不是标准输入读取数据。第一个参数是文件指针，指定输入源。'  
+},  
+{  
+    text: '系统的标准输入文件是指（）。',  
+    options: ['键盘', '显示器', '软盘', '硬盘'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C语言中，系统的标准输入文件默认是键盘。当使用scanf或getchar等函数从标准输入读取数据时，实际上是从键盘读取用户输入的数据。'  
+},  
+{  
+    text: '函数 ftell(fp) 的作用是（）。',  
+    options: ['得到流式文件中的当前位置', '移到流式文件的位置指针', '初始化流式文件的位置指针', '以上答案均正确'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'ftell(fp)函数返回文件指针fp当前的位置，即从文件开头到当前位置的字节数。它不会移动文件位置指针或进行初始化操作，只返回当前位置信息。'  
+},  
+{  
+    text: '函数 rewind 的作用是（）。',  
+    options: ['使位置指针重新返回文件的开头', '将位置指针指向文件中所要求的特定位置', '使位置指针指向文件的末尾', '使位置指针自动移至下一个字符位置'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'rewind(fp)函数的作用是将文件指针fp重新定位到文件的开头。这相当于执行fseek(fp, 0L, SEEK_SET)，但rewind还会清除文件的错误标志。'  
+},  
+{  
+    text: 'fseek函数的正确调用形式是（）。',  
+    options: ['fseek(文件类型指针,起始点,位移量)', 'fseek(fp,位移量,起始点)', 'fseek(位移量,起始点,fp)', 'fseek(起始点,位移量,文件类型指针)'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fseek函数的正确调用形式是fseek(fp,位移量,起始点)。第一个参数是文件指针，第二个参数是位移量（偏移量），第三个参数是起始位置（SEEK_SET表示文件开头，SEEK_CUR表示当前位置，SEEK_END表示文件末尾）。'  
+},  
+{  
+    text: '利用 fseek 函数可以实现的操作是（）。',  
+    options: ['改变文件的位置指针', '文件的顺序读写', '文件的随机读写', '以上答案均正确'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fseek函数可以实现所有列出的操作：改变文件的位置指针，进行文件的顺序读写（通过连续设置位置），以及实现文件的随机读写（通过跳转到文件的任意位置）。'  
+},  
+{  
+    text: '函数调用语句：fseek(fp,-20L,2);的含义是（）。',  
+    options: ['将文件位置指针移到距离文件头20个字节处', '将文件位置指针从当前位置向后移动20个字节', '将文件位置指针从文件末尾处退后20个字节', '将文件位置指针移到离当前位置20个字节处'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fseek(fp,-20L,2)表示将文件位置指针从文件末尾（参数2表示SEEK_END）向前移动20个字节。负的偏移量表示向前移动，正的偏移量表示向后移动。'  
+},  
+{  
+    text: '若调用fputc函数输出字符成功，则其返回值是（）。',  
+    options: ['EOF', '1', '0', '输出的字符'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fputc函数成功输出字符后，返回值是所输出的字符。如果发生错误，则返回EOF（通常是-1）。这与大多数返回状态码的函数不同，fputc返回实际写入的字符。'  
+},  
+{  
+    text: '在执行 fopen 函数时，ferror 函数的初值是（）。',  
+    options: ['TRUE', '-1', '1', '0'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在执行fopen函数时，ferror函数的初值是0，表示没有错误。只有当文件操作发生错误时，ferror函数才会返回非零值。每次调用clearerr函数后，error标志也会被重置为0。'  
+},  
+{  
+    text: 'fwrite函数的一般调用形式是（）。',  
+    options: ['fwrite(buffer,count,size,fp);', 'fwrite(fp,size,count,buffer);', 'fwrite(fp,count,size,buffer);', 'fwrite(buffer,size,count,fp);'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fwrite函数的正确调用形式是fwrite(buffer,size,count,fp)。第一个参数buffer是要写入的数据的地址，第二个参数size是每个数据项的大小（以字节为单位），第三个参数count是要写入的数据项数量，第四个参数fp是指向FILE结构的指针。'  
+},  
+{  
+    text: '以下fread函数的调用形式中，参数类型正确的是（）。',  
+    options: ['fread(int fd,char *buf,int count)', 'fread(int *buf,int fd,int count)', 'fread(int fd,int count,char *buf)', 'fread(int count,char *buf,int fd)'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '给出的选项中没有完全正确的fread函数调用形式。标准的fread调用形式是fread(void *buffer, size_t size, size_t count, FILE *stream)。但在给定选项中，选项A最接近，虽然它仍然是错误的（fd应该是FILE*类型，且缺少size参数）。'  
+},  
+{  
+    text: '已知函数的调用形式：fread(buffer,size,count,fp);其中buffer代表的是（）。',  
+    options: ['一个整数,代表要读入的数据项总数', '一个文件指针,指向要读的文件', '一个指针,指向要读入数据的存放地址', '一个存储区,存放要读的数据项'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fread函数调用中，buffer参数是一个指针，指向要读入数据的存放地址。它可以指向任何类型的数据，通常是一个数组或结构体变量的地址，用于存储从文件读取的数据。'  
+},  
+{  
+    text: '当顺利执行了文件关闭操作时，fclose函数的返回值是（）。',  
+    options: ['-1', 'TRUE', '0', '1'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fclose函数成功关闭文件时返回0。如果关闭文件时发生错误，则返回EOF（通常定义为-1）。这与许多C库函数一致，它们成功时返回0，失败时返回非零值。'  
+},  
+{  
+    text: '若以"a+"方式打开一个已存在的文件，则以下叙述正确的是（）。',  
+    options: ['文件打开时,原文件内容不被删除,位置指针移到文件末尾,可作添加和读操作', '文件打开时,原文件内容不被删除,位置指针移到文件开头,可作重写和读操作', '文件打开时,原有文件内容被删除,只可作写操作', '以上各种说法皆不正确'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '使用"a+"方式打开已存在的文件时，原文件内容不会被删除，文件位置指针初始位于文件末尾，可以进行追加写入和读取操作。读取操作前通常需要使用fseek或rewind重新定位文件位置指针。'  
+},  
+{  
+    text: '若要用fopen函数打开一个新的二进制文件，该文件要既能读也能写，则文件方式字符串应是（）。',  
+    options: ['"ab++"', '"wb+"', '"rb+"', '"ab"'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '"wb+"是打开一个新的二进制文件用于读写的正确模式。"w"表示写入模式，如果文件存在则清空文件，如果不存在则创建新文件；"b"表示二进制模式；"+"表示允许读写。"ab++"不是标准模式；"rb+"是打开已存在的文件；"ab"只能追加写入不能读。'  
+},  
+{  
+    text: '若执行fopen函数时发生错误，则函数的返回值是（）。',  
+    options: ['地址值', '0', '1', 'EOF'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fopen函数正常时返回一个FILE指针（文件句柄）。如果发生错误，返回NULL（空指针，即0）。EOF通常是-1，用于表示文件结束或I/O操作错误。'  
+},  
+{  
+    text: '以下叙述中不正确的是（）。',  
+    options: ['C语言中的文本文件以ASCⅡ码形式存储数据', 'C语言中对二进制文件的访问速度比文本文件快', 'C语言中，随机读写方式不适用于文本文件', 'C语言中，顺序读写方式不适用于二进制文件'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言中，顺序读写方式适用于所有类型的文件，包括二进制文件。二进制文件可以进行顺序读写，也可以进行随机读写。其他说法都是正确的：文本文件以ASCII码存储；二进制文件访问通常比文本文件快；文本文件虽然可以用fseek进行定位，但处理换行符等特殊字符时可能有问题。'  
+},  
+{  
+    text: '以下可作为函数fopen中第一个参数的正确格式是（）。',  
+    options: ['c:user\\text.txt', 'c:\\user\\text.txt', '"c:\\user\\text.txt"', '"c:\\\\user\\\\text.txt"'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C字符串中，反斜杠\\是转义字符，要表示一个实际的反斜杠，需要使用两个反斜杠\\\\。因此，正确的路径格式是"c:\\\\user\\\\text.txt"，它在字符串中表示"c:\\user\\text.txt"。选项C在源码中是正确的，但在字符串里\\会被解释为转义序列，导致路径不正确。'  
+},  
+{  
+    text: 'fgetc函数的作用是从指定文件读入一个字符，该文件的打开方式必须是（）。',  
+    options: ['只写', '追加', '读或读写', '答案B和C都正确'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fgetc函数用于从文件中读取一个字符，所以文件必须以读模式或读写模式打开，如"r"、"r+"、"w+"、"a+"等。只写模式("w"或"a")不允许读取操作，因此不能使用fgetc。'  
+},  
+{  
+    text: '以下叙述中错误的是（）。',  
+    options: ['二进制文件打开后可以先读文件的末尾,而顺序文件不可以', '在程序结束时,应当用fclose函数关闭已打开的文件', '在利用fread函数从二进制文件中读数据时,可以用数组名给数组中所有元素读入数据', '不可以用FILE定义指向二进制文件的文件指针'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C语言中，无论是文本文件还是二进制文件，都使用FILE类型的指针作为文件句柄。选项D是错误的，FILE可以定义指向任何类型文件的指针。其他说法都是正确的：二进制文件可以随机访问；程序结束前应关闭文件；fread可以一次读取数组中所有元素。'  
+},  
+{  
+    text: '下列关于C语言数据文件的叙述中正确的是（）。',  
+    options: ['文件由ASCII码字符序列组成,C语言只能读写文本文件', '文件由二进制数据序列组成,C语言只能读写二进制文件', '文件由记录序列组成,可按数据的存放形式分为二进制文件和文本文件', '文件由数据流形式组成,可按数据的存放形式分为二进制文件和文本文件'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言中的文件是由数据流组成的，可以按数据的存放形式分为二进制文件和文本文件。C语言可以处理这两种类型的文件，而不是仅限于其中一种。文件不是由记录序列组成的，C语言的文件没有记录的概念，只有字节流。'  
+},  
+{  
+    text: '若fp已正确定义并指向某个文件，当未遇到该文件结束标志时函数feof(fp)的值为（）。',  
+    options: ['0', '1', '-1', '一个非0值'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'feof函数检查文件是否到达结束位置。当文件未到达结束位置时，feof函数返回0（假）；只有当到达文件结束位置时，才返回非零值（真）。'  
+},  
+{  
+    text: '若要打开A盘上user子目录下名为abc.txt的文本文件进行读、写操作，下面符合此要求的函数调用是（）。',  
+    options: ['fopen("A:\\user\\abc.txt","r")', 'fopen("A:\\\\user\\\\abc.txt","r+")', 'fopen("A:\\user\\abc.txt","rb")', 'fopen("A:\\\\user\\\\abc.txt","w")'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fopen("A:\\\\user\\\\abc.txt","r+")是正确的调用方式。"r+"模式表示打开文件进行读写操作，文件必须已存在。路径中的反斜杠需要使用\\\\表示，因为\\在C语言字符串中是转义字符。"r"模式只读不写；"rb"是二进制只读；"w"会清空原文件内容。'  
+},  
+{  
+    text: '在C程序中，可把整型数以二进制形式存放到文件中的函数是（）。',  
+    options: ['fprintf函数', 'fread函数', 'fwrite函数', 'fputc函数'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'fwrite函数可以将任何类型的数据（包括整型数）以二进制形式写入文件。fprintf将数据转换为文本形式；fread是从文件读取数据；fputc只能写入单个字符。'  
+},  
+{  
+    text: '若fp是指向某文件的指针，且已读到此文件末尾,则库函数feof(fp)的返回值是（）。',  
+    options: ['EOF', '0', '非零值', 'NULL'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'feof(fp)函数在文件到达末尾时返回非零值（真），表示已到达文件结束位置。未到达文件末尾时返回0。EOF常用于表示读取操作的错误或文件结束，但不是feof的返回值。'  
+},  
+{  
+    text: 'C语言结构体类型变量在程序执行期间（）。',  
+    options: ['所有成员一直驻留在内存中', '只有一个成员驻留在内存中', '部分成员驻留在内存中', '没有成员驻留在内存中'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言的结构体变量在程序执行期间，其所有成员都一直驻留在内存中，共同占用一段连续的内存空间。结构体的内存分配是整体进行的，不能只为部分成员分配内存。'  
+},  
+{  
+    text: '当说明一个结构体变量时系统分配给它的内存是（）。',  
+    options: ['各成员所需内存量的总和', '结构中第一个成员所需内存量', '成员中占内存量最大者所需的容量', '结构中最后一个成员所需内存量'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '声明结构体变量时，系统分配的内存量至少是各成员所需内存量的总和（考虑对齐可能会更大）。结构体成员在内存中连续排列，每个成员都占用相应类型所需的内存空间。'  
+},  
+{  
+    text: '下列变量中合法的是',  
+    options: ['B.C.Tom', '3a6b', '_6a7b', '$ABC'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '_6a7b是合法的变量名。C语言变量名必须以字母或下划线开头，后跟字母、数字或下划线。B.C.Tom含有非法字符.；3a6b以数字开头；$ABC含有非法字符$。'  
+},  
+{  
+    text: '整型变量x=1,y=3,经下列计算后,x的值不等于6的是',  
+    options: ['x=(x=1+2,x*2)', 'x=y>2?6:5', 'x=9-(--y)-(y--)', 'x=y*4/2'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '分析选项C：y=3, --y将y减1变为2, 9-2=7, 然后y--将y再减1变为1, 7-1=6。因此x=6。\n但正确答案应为A：x=(x=1+2,x*2)，这里使用了逗号表达式，先计算x=1+2使x=3，然后计算x*2=6，最终x=6。\n选项B：y>2为真，所以x=6。\n选项D：y*4/2=3*4/2=12/2=6。\n\n检查计算，可能是我理解错误。再计算选项A：x=(x=1+2,x*2)中，逗号表达式的值为最后一个表达式的值。先计算x=1+2，使x=3；然后整个逗号表达式的值为x*2=6，最终x=6。这与答案C不一致，需再检查选项C。\n\n重新计算选项C：x=9-(--y)-(y--)。y=3，--y将y减1后再使用，变为2，同时y变为2。9-2=7，然后计算y--，使用y的值2，然后y减1变为1。所以整个表达式是9-2-2=5。因此x=5≠6，选项C是正确答案。'  
+},  
+{  
+    text: '能正确表示逻辑关系:" a≥10或a≤0 "的C语言表达式是',  
+    options: ['a>=10 or a<=0', 'a>=0 | a<=10', 'a>=10 && a<=0', 'a>=10 || a<=0'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '表达式"a≥10或a≤0"在C语言中应使用逻辑或运算符||，即a>=10 || a<=0。C语言不使用关键字or表示逻辑或；单个|是按位或，不是逻辑或；&&是逻辑与，表示"且"不是"或"。'  
+},  
+{  
+    text: 'C程序的基本结构单位是',  
+    options: ['文件', '语句', '函数', '表达式'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言程序的基本结构单位是函数。C程序由一个或多个函数组成，每个函数完成特定的任务，必须至少有一个main函数作为程序的入口。函数由语句构成，语句可以包含表达式。'  
+},  
+{  
+    text: '设有说明:char w; int x; float y; double z; 则表达式w*x+z-y值的数据类型为',  
+    options: ['float', 'int', 'char', 'double'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在表达式计算中，操作数会按照精度从低到高的顺序转换：char→int→float→double。因此在w*x+z-y中，w和x先转为int计算得到int结果，然后与double类型的z一起计算，结果为double类型，最后与float类型的y计算，最终结果为double类型。'  
+},  
+{  
+    text: '已定义两个字符数组a,b,则以下正确的输入格式是',  
+    options: ['scanf("%s%s", a, b);', 'get(a, b);', 'scanf("%s%s", &a, &b);', 'gets("a"),gets("b");'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'scanf("%s%s", a, b);是正确的输入格式。当使用scanf读取字符串到字符数组时，数组名本身就是地址，不需要使用&运算符。get函数不存在；scanf("%s%s", &a, &b)是错误的，不需要&；gets("a")错误，参数应该是字符数组而不是字符串常量。'  
+},  
+{  
+    text: 'C语言中,逻辑"真"等价于',  
+    options: ['大于零的数', '非零的数', '大于零的整数', '非零的整数'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言中，逻辑"真"等价于任何非零值，不限于整数，也不限于正数。在条件判断中，非零值被视为真，零值被视为假。'  
+},  
+{  
+    text: '函数调用:strcat(strcpy(str1,str2),str3)的功能是',  
+    options: ['将串str1复制到串str2中后再连接到串str3之后', '将串str1连接到串str2之后再复制到串str3之后', '将串str2连接到串str1之后再将串str1复制到串str3中', '将串str2复制到串str1中后再将串str3连接到串str1之后'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'strcat(strcpy(str1,str2),str3)的执行过程是：\n1. strcpy(str1,str2)将str2复制到str1中，然后返回str1\n2. strcat(str1,str3)将str3连接到str1后面\n所以功能是将str2复制到str1中，然后再将str3连接到str1后面。'  
+},  
+{  
+    text: '任何一个C语言的可执行程序都是从____开始执行的.',  
+    options: ['程序中的第一个函数', 'main( )函数的入口处', '程序中的第一条语句', '编译预处理语句'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言的可执行程序总是从main函数的入口处开始执行，无论它在源文件中的位置如何。所有其他函数只有在被调用时才会执行。编译预处理语句在编译前执行，不是程序运行时执行的。'  
+},  
+{  
+    text: '下面叙述中错误的是',  
+    options: ['函数的形式参数,在函数未被调用时就不被分配存储空间', '若函数的定义出现在主调函数之前,则可以不必再加说明', '若一个函数没有return语句,则什么值也不会返回', '一般来说,函数的形参和实参的类型要一致'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '若函数没有return语句，对于非void类型的函数，会返回一个不确定的值（可能是内存中的随机值），不是"什么值也不返回"。形式参数确实在函数调用时才分配空间；函数定义在主调函数之前可以不用声明；形参和实参的类型通常应该一致。'  
+},  
+{  
+    text: '在一个C源程序文件中,若要定义一个只允许本源文件中所有函数使用的全局变量,则该变量需要使用的存储类型是',  
+    options: ['extern', 'register', 'auto', 'static'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '使用static关键字定义的全局变量只在定义它的源文件内可见，其他文件无法访问，这就是所谓的"内部链接"。extern用于声明外部变量；register请求变量存储在寄存器中；auto是局部变量的默认存储类型。'  
+},  
+{  
+    text: '若有以下定义和语句:\n int  a[10]={1,2,3,4,5,6,7,8,9,10}, *p=a;\n不能表示a数组元素的表达式是',  
+    options: ['*p', 'a[9]', '*p++', 'a[*p-a]'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'a[*p-a]是错误的表达式。p指向a[0]，*p值为1，1-a是无效的，因为不能从指针中减去一个地址。a[9]表示数组最后一个元素；*p表示a[0]；*p++先使用p指向的值，然后p增加1，指向下一个元素。'  
+},  
+{  
+    text: 'C语言函数的隐含存储类别是',  
+    options: ['static', 'auto', 'register', 'extern'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言函数的默认存储类型是extern，意味着函数可以在其他文件中被调用，具有外部链接属性。auto和register只适用于变量，不适用于函数；static函数只能在定义它的文件中调用。'  
+},  
+{  
+    text: '下面说法中错误的是',  
+    options: ['共用体变量的地址和它各成员的地址都是同一地址', '共用体内的成员可以是结构变量,反之亦然', '在任一时刻,共用体变量的各成员只有一个有效', '函数可以返回一个共用体变量'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C语言中，函数可以返回一个共用体变量，这是完全合法的。其他说法都是正确的：共用体变量的地址就是其所有成员的地址；共用体的成员可以是结构体，结构体的成员也可以是共用体；共用体的所有成员共享同一内存空间，任一时刻只有一个成员的值有效。'  
+},  
+{  
+    text: '设变量定义为"int x, *p=&x;",则&(*p)相当于',  
+    options: ['p', '*p', 'x', '*(&x)'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '&(*p)相当于p。p指向x，*p得到x的值，再对x的值取地址&(*p)，就回到了x的地址，即p。这里&和*是互逆操作，相互抵消。*p等价于x；*(&x)也等价于x。'  
+},  
+{  
+    text: '以下程序的执行结果是\nmain()\n  { int  x = 0, s = 0;\n    while( !x != 0 ) s += ++x;\n    printf( "%d ",s ); }',  
+    options: ['0', '1', '语法错误', '无限循环'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '分析循环条件：!x != 0\nx=0，!x=1，1!=0为真，所以循环一次\ns += ++x 等价于 s = s + 1 = 0 + 1 = 1\n此时x=1，!x=0，0!=0为假，循环结束\n因此输出s为1'  
+},  
+{  
+    text: '执行下列程序段后,m的值是________.\n  int w=2,x=3,y=4,z=5,m;\n  m=(w<x)?w:x;\n  m=(m<y)?m:y;\n  m=(m<z)?m:z;',  
+    options: ['4', '3', '5', '2'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '第一行：w<x为真，所以m=w=2\n第二行：m<y，2<4为真，所以m=m=2\n第三行：m<z，2<5为真，所以m=m=2\n最终m=2'  
+},  
+{  
+    text: 'C语言的switch语句中case后',  
+    options: ['只能为常量', '只能为常量或常量表达式', '可为常量或表达式或有确定值的变量及表达式', '可为任何量或表达式'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言的switch语句中，case后面只能是常量或常量表达式，必须在编译时确定值。不能使用变量或需要在运行时计算的表达式。如case 1:、case \'A\':、case 2+3:都是合法的，但case x:（x是变量）不合法。'  
+},  
+{  
+    text: 'C语言的if语句中,用作判断的表达式为',  
+    options: ['任意表达式', '逻辑表达式', '关系表达式', '算术表达式'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言if语句的条件部分可以是任意表达式，不限于逻辑表达式、关系表达式或算术表达式。在C中，非零值被视为真，零值被视为假，这让任何能产生值的表达式都可以用作条件。'  
+},  
+{  
+    text: 'C 语言程序的三种基本结构是顺序结构、选择结构和______结构.',  
+    options: ['循环', '递归', '转移', '嵌套'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言程序的三种基本结构是顺序结构、选择结构和循环结构。这是结构化程序设计的基本原则，也称为"三种基本控制结构"。递归是一种特殊的函数调用方式；转移通常指goto等非结构化控制；嵌套是结构的组合方式，不是基本结构类型。'  
+},  
+{  
+    text: '若变量已正确定义且 k 的值是 4,计算表达式 ( j =4, k--) 后,j和k的值为',  
+    options: ['j=3, k=3', 'j=3, k=4', 'j=4, k=4', 'j=4, k=3'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '分析表达式(j=4, k--)：\n1. 逗号表达式从左到右计算每个子表达式\n2. j=4将j的值设为4\n3. k--使用k的当前值(4)然后将k减1变为3\n4. 整个逗号表达式的值为最后一个子表达式的值，即k--的值4\n所以j=4, k=3'  
+},  
+{  
+    text: '下列语句定义pf为指向float类型变量f的指针,_____是正确的.',  
+    options: ['float  f, *pf = f;', 'float  f, *pf = &f;', 'float  *pf = &f, f;', 'float  f, pf'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'float f, *pf = &f;是正确的指针定义和初始化方式。pf被定义为指向float的指针，并通过&f获取f的地址进行初始化。选项A错误，应该用&f；选项C错误，声明顺序有问题；选项D错误，没有指定pf是指针类型。'  
+},  
+{  
+    text: '设变量定义为"int a, b;",执行下列语句时,输入_____,则a和b的值都是10.\nscanf("a=%d, b=%d",&a, &b);',  
+    options: ['10 10', '10, 10', 'a=10  b=10', 'a=10, b=10'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'scanf("a=%d, b=%d",&a, &b)要求输入的格式必须精确匹配"a=%d, b=%d"。因此，正确的输入应该是"a=10, b=10"，包括前缀"a="和"b="以及中间的逗号和空格。其他选项的格式与scanf中的格式字符串不匹配。'  
+},  
+{  
+    text: 'C语言源程序名的后缀是',  
+    options: ['.exe', '.c', '.obj', '.cp'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言源程序文件的标准后缀是.c。.exe是可执行文件后缀；.obj是目标文件后缀；.cp不是标准C后缀（可能指C++，但C++通常用.cpp）。'  
+},  
+{  
+    text: '以下关于long、int和short类型数据占用内存大小的叙述中正确的是',  
+    options: ['均占4个字节', '根据数据的大小来决定所占内存的字节数', '由用户自己定义', '由C语言编译系统决定'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'long、int和short类型数据占用的内存大小由C语言编译系统（具体实现）决定，而不是固定不变的。C标准只规定了它们之间的相对大小关系：short ≤ int ≤ long，具体字节数视平台而定。例如，在32位系统上通常int占4字节，但在16位系统上可能占2字节。'  
+},  
+{  
+    text: '若变量均已正确定义并赋值,以下合法的C语言赋值语句是',  
+    options: ['x=n/2.5;', 'x==5;', 'x+n=I;', '5=x=4+1;'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'x=n/2.5;是合法的赋值语句，将n除以2.5的结果赋给x。x==5是比较操作不是赋值；x+n=I将值赋给表达式，不合法；5=x=4+1试图将值赋给常量5，不合法。'  
+},  
+{  
+    text: '已知字符\'A\'的ASCⅡ代码值是65,字符变量c1的值是\'A\',c2的值是\'D\'.执行语句printf("%d,%d",c1,c2-2);后,输出结果是',  
+    options: ['A,B', 'A,68', '65,66', '65,68'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'c1的值是\'A\'，其ASCII码是65，使用%d格式输出数值65。c2的值是\'D\'，ASCII码是68，c2-2=66，即字符\'B\'的ASCII码，使用%d格式输出数值66。所以结果是"65,66"。'  
+},  
+{  
+    text: '以下叙述中错误的是',  
+    options: ['用户所定义的标识符允许使用关键字', '用户所定义的标识符应尽量做到"见名知意"', '用户所定义的标识符必须以字母或下划线开头', '用户定义的标识符中,大、小写字母代表不同标识'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '用户所定义的标识符不允许使用关键字（如if、while、return等）。关键字是语言的保留字，有特定的语法功能，不能用作标识符。标识符确实应当见名知意；必须以字母或下划线开头；C语言是区分大小写的。'  
+},  
+{  
+    text: '以下叙述中错误的是',  
+    options: ['可以通过typedef增加新的类型', '可以用typedef将已存在的类型用一个新的名字来代表', '用typedef定义新的类型名后,原有类型名仍有效', '用typedef可以为各种类型起别名,但不能为变量起别名'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'typedef不能真正增加新的类型，它只能为已存在的类型创建别名。例如，typedef int Integer只是创建了int的一个别名Integer，而不是创建了一个新类型。其他说法都是正确的：typedef创建类型别名；原类型名仍有效；typedef只能为类型不能为变量起别名。'  
+},  
+{  
+    text: '下列(   )表达式的值为真,其中a=5;b=8;c=10;d=0',  
+    options: ['a*2>8+2', 'a&&d', '(a*2-c)||d', 'a-b<c*d'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '分析各表达式：\na*2>8+2 => 10>10 => false（错误，应为false）\na&&d => 5&&0 => false\n(a*2-c)||d => (10-10)||0 => 0||0 => false\na-b<c*d => -3<0 => true\n\n重新检查：a*2>8+2 => 10>10是false不是true；a-b<c*d => 5-8<10*0 => -3<0为true。\n因此答案应是D，但题目答案显示为A，可能有误。'  
+},  
+{  
+    text: '下列字符数组长度为5的是',  
+    options: ['char  a[]={\'h\', \'a\', \'b\', \'c\', \'d\'};', 'char b[]= {\'h\', \'a\', \'b\', \'c\', \'d\', \'\\0\'};', 'char    c[10]= {\'h\', \'a\', \'b\', \'c\', \'d\'};', 'char   d[6]= {\'h\', \'a\', \'b\', \'c\', \'\\0\' };'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'char a[]={\'h\', \'a\', \'b\', \'c\', \'d\'};定义了一个长度为5的字符数组。选项B长度为6，包括结束符；选项C长度为10，虽然只初始化了5个元素；选项D长度为6，虽然只使用了5个元素（包括结束符）。数组的长度是指数组能存储的元素个数。'  
+},  
+{  
+    text: '从循环体内某一层跳出,继续执行循环外的语句是',  
+    options: ['break语句', 'return语句', 'continue语句', '空语句'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'break语句用于从循环体内跳出，继续执行循环后面的语句。return语句会直接返回函数，不仅跳出循环还会结束函数；continue语句跳过本次循环的剩余语句，继续下一次循环；空语句什么也不做。'  
+},  
+{  
+    text: '下列数据中属于"字符串常量"的是',  
+    options: ['ABC', '"ABC"', '\'ABC\'', '\'A\''],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C语言中，字符串常量必须用双引号括起来，如"ABC"。ABC是标识符；\'ABC\'是错误的字符常量（字符常量只能包含一个字符）；\'A\'是字符常量不是字符串常量。'  
+},  
+{  
+    text: 'C语言源程序文件经过C编译程序编译连接之后生成一个后缀为(  )的可执行文件',  
+    options: ['.c', '.obj', '.exe', '.bas'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言源程序（.c文件）经过编译和链接后，在Windows系统上生成后缀为.exe的可执行文件。.obj是编译后的目标文件，尚未链接；.c是源文件；.bas是BASIC语言源文件。'  
+},  
+{  
+    text: '若有定义int a[10],*p=a;,则p+5表示',  
+    options: ['元素a[5]的地址', '元素a[5]的值', '元素a[6]的地址', '元素a[6]的值'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'p+5表示数组第6个元素a[5]的地址。p指向数组首元素a[0]，p+5表示从p向后偏移5个int大小的内存单元，也就是a[5]的地址。要获取a[5]的值，应使用*(p+5)。'  
+},  
+{  
+    text: '定义结构体的关键字是',  
+    options: ['union', 'enum', 'struct', 'typedef'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '定义结构体的关键字是struct。union用于定义共用体；enum用于定义枚举类型；typedef用于定义类型别名。'  
+},  
+{  
+    text: '为了避免在嵌套的条件语句if—else中产生二义性,C语言规定:else总与(  )配对',  
+    options: ['缩排位置相同的if', '其之前最近的未配对的if', '其之后最近的if', '同一行上的if'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言规定：else总是与其之前最近的未配对的if配对。这是为了避免嵌套if语句中的二义性。缩进格式对编译器没有影响；if语句在else之后不会影响配对；同一行上的if只是代码格式，不影响语法规则。'  
+},  
+{  
+    text: '下列正确的标识符是',  
+    options: ['_do', '6a', '%y', 'a+b'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '_do是正确的标识符，以下划线开头，后接字母。C语言的标识符必须以字母或下划线开头，后接字母、数字或下划线。6a以数字开头不合法；%y包含特殊字符%不合法；a+b包含运算符+不合法。'  
+},  
+{  
+    text: '设有说明:char c; int x; double z;则表达式c*x+z值的数据类型为',  
+    options: ['float', 'int', 'char', 'double'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在表达式计算中，操作数会按照精度从低到高的顺序转换：char→int→float→double。c和x的乘积是int类型，然后与double类型的z相加，根据类型提升规则，结果是double类型。'  
+},  
+{  
+    text: '下列说法中错误的是',  
+    options: ['一个数组只允许存储同种类型的变量', '如果在对数组进行初始化时,给定的数据元素个数比数组元素个数少时,多余的数组元素会被自动初始化为最后一个给定元素的值', '数组的名称其实是数组在内存中的首地址', '当数组名作为参数被传递给某个函数时,原数组中的元素的值可能被修改'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在对数组初始化时，如果给定的数据元素个数少于数组大小，多余的元素会被初始化为0（对于数值类型）或空字符（对于字符类型），不是初始化为最后一个给定元素的值。其他说法都是正确的：数组只能存储同种类型变量；数组名是数组首地址；作为参数传递时，函数可以修改原数组元素。'  
+},  
+{  
+    text: '判断两个字符串是否相等,正确的表达方式是',  
+    options: ['s1==s2', 's1=s2', 'strcmp(s1,s2)==0', 'strcmp(s1,s2)=0'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'strcmp(s1,s2)==0是判断两个字符串是否相等的正确方式。C语言中不能直接用==比较字符串，s1==s2比较的是两个字符串的地址而不是内容；s1=s2是赋值操作不是比较；strcmp(s1,s2)=0错误地试图修改函数返回值。'  
+},  
+{  
+    text: '下面叙述中错误的是',  
+    options: ['主函数中定义的变量在整个程序中都是有效的', '在其它函数中定义的变量在主函数中也不能使用', '形式参数也是局部变量', '复合语句中定义的变量只在该复合语句中有效'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '主函数中定义的变量并不在整个程序中都有效，它们只在main函数内部有效，除非声明为全局变量。其他函数中定义的变量确实在main函数中不能使用；形参确实是局部变量；复合语句（大括号内的代码块）中定义的变量确实只在该复合语句中有效。'  
+},  
+{  
+    text: 'C语言函数内定义的局部变量的隐含存储类别是',  
+    options: ['static', 'auto', 'register', 'extern'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言函数内定义的局部变量的默认存储类别是auto，表示自动变量，在函数调用时分配内存，函数返回时释放内存。static变量在函数返回后仍保持其值；register请求将变量存储在寄存器中；extern用于声明外部变量。'  
+},  
+{  
+    text: '有定义:char*p1,*p2;则下列表达式中正确合理的是',  
+    options: ['p1/=5', 'p1*=p2', 'p1=&p2', 'p1+=5'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'p1+=5是正确的表达式，表示指针p1向后移动5个字符的位置。指针可以进行加减运算，但不能进行乘除运算，所以p1/=5和p1*=p2都是错误的；p1=&p2不正确，因为p2是指针，&p2是指针的地址，类型不匹配。'  
+},  
+{  
+    text: '若int a=2,则执行完表达式a-=a+=a*a后,a的值是',  
+    options: ['-8', '-4', '-2', '0'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '计算a-=a+=a*a：\n1. a*a = 2*2 = 4\n2. a+=4相当于a=a+4=2+4=6\n3. a-=6相当于a=a-6=6-6=0\n结果应该是0，但题目答案显示为-2，可能有误。\n\n再检查：a+=a*a是将a*a的值加到a上，同时表达式的值为赋值后的a。所以正确计算：\n1. a*a = 2*2 = 4\n2. a+=4使a=6，表达式值为6\n3. a-=6使a=0，而不是-2\n\n或者考虑优先级和结合性：a-=(a+=(a*a))，从右到左结合：\n1. a*a = 4\n2. a+=4导致a=6\n3. a-=6导致a=0\n\n答案应该是0，但题目标准答案是-2。'  
+},  
+{  
+    text: '算术运算符、赋值运算符和关系运算符的运算优先级按从高到低顺序依次为',  
+    options: ['算术运算、赋值运算、关系运算', '关系运算、赋值运算、算术运算', '算术运算、关系运算、赋值运算', '关系运算、算术运算、赋值运算'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言中，运算符优先级从高到低依次为：算术运算符（如+、-、*、/）> 关系运算符（如>、<、==）> 赋值运算符（如=、+=、-=）。例如，在表达式a = b + c > d中，先计算b+c，再与d比较，最后赋值给a。'  
+},  
+{  
+    text: '以下程序的执行结果是_______.\n  main()\n  {  int  num = 0;\n    while( num <= 2 ) {  num++;  printf( "%d,",num ); }   }',  
+    options: ['0,1,2', '1,2,', '1,2,3,', '1,2,3,4,'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '程序执行过程：\n开始时num=0\n第1次循环：0<=2为真，num++变为1，输出"1,"\n第2次循环：1<=2为真，num++变为2，输出"2,"\n第3次循环：2<=2为真，num++变为3，输出"3,"\n第4次循环：3<=2为假，退出循环\n所以输出结果是"1,2,3,"'  
+},  
+{  
+    text: '以下程序的执行结果是________.\n  main()\n  { int  w = 1, x = 2, y = 3, z = 4;\n     w =( w < x ) ? x : w;\n    w =( w < y ) ? y : w;\n         w =( w < z ) ? z : w;\n    printf( "%d " , w );}',  
+    options: ['1', '2', '3', '4'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '程序执行过程：\n初始值w=1, x=2, y=3, z=4\n第1行：w<x为真，w=x=2\n第2行：w<y为真，w=y=3\n第3行：w<z为真，w=z=4\n输出w的值：4'  
+},  
+{  
+    text: '以下程序的输出结果是________.\n  void  fun(int  a, int  b, int  c)\n  {  a=456; b=567; c=678;  }\n  main()\n  {  int  x=10, y=20, z=30;\n     fun(x, y, z);\n     printf("%d,%d,%d\\n", z, y, x);}',  
+    options: ['30,20,10', '10,20,30', '456567678', '678567456'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言使用传值调用方式，函数fun中的参数a、b、c是形参，它们是实参x、y、z的副本。在fun函数中修改a、b、c的值不会影响实参x、y、z的值。因此，调用fun后，x、y、z的值仍然是10、20、30，输出z,y,x的顺序即"30,20,10"。'  
+},  
+{  
+    text: '若x=2,y=3则x||y的结果是',  
+    options: ['0', '1', '2', '3'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'x||y是逻辑或操作。当x=2, y=3时，x和y都是非零值，在C语言中非零值被视为"真"。逻辑或运算的结果是：如果任一操作数为真，则结果为真（1），否则为假（0）。因此x||y的结果是1。'  
+},  
+{  
+    text: 'C语言中,switch后的括号内表达式的值可以是',  
+    options: ['只能为整型', '只能为整型,字符型,枚举型', '只能为整型和字符型', '任何类型'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言中，switch语句的控制表达式只能是整型、字符型或枚举型。不能使用浮点型、指针类型或其他类型作为switch的控制表达式。字符型在比较时会转换为对应的ASCII码（整型）值。'  
+},  
+{  
+    text: '下面叙述中正确的是',  
+    options: ['对于用户自己定义的函数,在使用前必须加以声明', '声明函数时必须明确其参数类型和返回类型', '函数可以返回一个值,也可以什么值也不返回', '空函数在不完成任何操作,所以在程序设计中没有用处'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '函数可以返回一个值（有返回类型的函数），也可以什么值都不返回（void类型函数），这是正确的。自定义函数如果定义在使用前，可以不用声明；函数声明时可以省略参数名；空函数虽然不执行实际操作，但在程序设计中有用，如作为占位符或接口规范。'  
+},  
+{  
+    text: '对于定义,char *aa[2]={"abcd","ABCD"},选项中说法正确的是',  
+    options: ['aa数组元素的值分别是"abcd"和"ABCD"', 'aa是指针变量,它指向含有两个数组元素的字符型一维数组', 'aa数组的两个元素分别存放的是含有4个字符的一维字符数组的首地址', 'aa数组的两个元素中各自存放了字符\'a\'和\'A\'的地址'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'char *aa[2]={"abcd","ABCD"}定义了一个包含两个元素的指针数组，每个元素都是指向字符的指针。这两个元素分别存放了字符串"abcd"和"ABCD"的首地址，即指向了这两个字符数组的开头。aa不是指针变量而是数组；数组元素的值是地址而不是字符串本身；存放的是整个字符串的地址而不仅是首字符的地址。'  
+},  
+{  
+    text: '以下正确的字符串常量是',  
+    options: ['\\\\"', '\'abc\'', 'OlympicGames', '\'A\''],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '\\\\"是正确的字符串常量，表示一个包含反斜杠和双引号的字符串。\'abc\'是错误的字符常量（字符常量只能包含一个字符）；OlympicGames是标识符不是字符串常量；\'A\'是字符常量不是字符串常量。字符串常量应该用双引号括起来。'  
+},  
+{  
+    text: '如果int a=2,b=3,c=0,下列描述正确的是',  
+    options: ['a>b!=c和a>(b!=c)的执行顺序是一样的', '!a!=(b!=c)表达式的值为1', 'a||(b=c)执行后b的值为0', 'a&&b>c的结果为假'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '分析!a!=(b!=c)：a=2，!a=0，b!=c是3!=0为真，值为1。0!=1为真，值为1。\na>b!=c和a>(b!=c)顺序不同：a>b!=c是(a>b)!=c即0!=0为假；a>(b!=c)是a>1即2>1为真。\na||(b=c)执行后b为0，因为a为真，b=c不执行（短路求值）。\na&&b>c的结果为(a&&b)>c即2>0为真，不是假。'  
+},  
+{  
+    text: '若有如下定义和语句,且0<=i<5,下面(    )是对数值为3数组元素的引用\n  int a[]={1,2,3,4,5},*p,i;\n  p=a;',  
+    options: ['*(a+2)', 'a[p-3]', 'p+2', 'a+3'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '*(a+2)引用的是数组第3个元素a[2]，其值为3。a[p-3]非法，p是指针不能用于下标；p+2是指向a[2]的指针，不是值3；a+3是指向a[3]的指针，不是值3。'  
+},  
+{  
+    text: '字符串指针变量中存入的是',  
+    options: ['字符串', '字符串的首地址', '第一个字符', '字符串变量'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '字符串指针变量中存储的是字符串的首地址，即字符串第一个字符的内存地址，而不是字符串本身。例如，char *p="hello";中，p存储的是字符串"hello"在内存中的首地址。'  
+},  
+{  
+    text: '为表示关系x≥y≥z,应使用C语言表达式',  
+    options: ['(x>=y)&&(y>=z)', '(x>=y) AND (y>=z)', '(x>=y>=z)', '(x>=z)&(y>=z)'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C语言中，要表示x≥y≥z，需要使用(x>=y)&&(y>=z)。C语言不支持数学中的连续比较，如x>=y>=z；C语言使用&&表示逻辑与，而不是AND；(x>=z)&(y>=z)使用了位运算符&，不是逻辑与。'  
+},  
+{  
+    text: 'C语言源程序文件经过C编译程序编译后生成的目标文件的后缀为',  
+    options: ['.c', '.obj', '.exe', '.bas'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'C语言源程序（.c文件）经过编译后生成的目标文件后缀为.obj（在Windows系统上，在Unix/Linux系统上通常是.o）。这是编译后但尚未链接的中间文件。.c是源文件；.exe是可执行文件（编译并链接后）；.bas是BASIC语言源文件。'  
+},  
+{  
+    text: '若变量已正确定义,执行语句scanf("%d,%d,%d ",&k1,&k2,&k3);时,___是正确的输入',  
+    options: ['2030,40', '20 30 40', '20, 30 40', '20,30,40'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '对于scanf("%d,%d,%d ",&k1,&k2,&k3);，正确的输入格式应该是"20,30,40"，即三个整数之间用逗号分隔，与格式字符串中的格式严格匹配。其他输入方式会导致scanf无法按预期解析输入数据。'  
+},  
+{  
+    text: 'C语言中while和do—while循环的主要区别是',  
+    options: ['While的循环控制条件比do—while的循环控制条件严格', 'do—while的循环体至少无条件执行一次', 'do—while允许从外部转到循环体内', 'do—while循环体不能是复合语句'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'while和do-while循环的主要区别是：do-while循环的循环体至少会执行一次，因为条件判断在循环体执行之后；而while循环在首次执行循环体之前就判断条件，如果条件为假，循环体可能一次也不执行。两种循环的条件并没有严格性区别；do-while不允许从外部跳转到循环体；do-while循环体可以是复合语句。'  
+},  
+{  
+    text: 'main()\n{int x=1,a=0,b=0;\nswitch (x)\n  { case  0: b++;\n    case  1: a++;\ncase  2: a++;b++;}                     \nprintf("a=%d,b=%d",a,b);}',  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    options: ['a=2,b=1', 'a=1,b=1', 'a=1,b=0', 'a=2,b=2'],  
+    explanation: '程序执行过程：\nx=1，所以从case 1开始执行（没有break语句，会继续执行后面的case）\ncase 1: a++; 使a=1\ncase 2: a++;b++; 使a=2,b=1\n最终输出：a=2,b=1'  
+},  
+{  
+    text: '定义共用体的关键字是',  
+    options: ['union', 'enum', 'struct', 'typedef'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '定义共用体（联合）的关键字是union。enum用于定义枚举类型；struct用于定义结构体；typedef用于定义类型别名。共用体的所有成员共享同一块内存空间，任一时刻只有一个成员的值有效。'  
+},  
+{  
+    text: '下列关于指针定义的描述,___________是错误的',  
+    options: ['指针是一种变量,该变量用来存放某个变量的地址值的', '指针是一种变量,该变量用来存放某个变量的值', '指针变量的类型与它所指向的变量类型一致', '指针变量的命名规则与标识符相同'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '指针变量用来存放某个变量的地址值，而不是变量的值。要访问指针所指向的变量的值，需要使用解引用操作符*。其他描述都是正确的：指针确实存放地址；指针变量的类型应与它所指向的变量类型一致；指针变量的命名规则与其他标识符相同。'  
+},  
+{  
+    text: '设a和b均为double型常量,且a=5.5、b=2.5,则表达式(int)a+b/b的值是______。',  
+    options: ['6.500000', '6', '5.500000', '6.000000'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '计算(int)a+b/b：\n1. (int)a将5.5转换为整数5\n2. b/b=2.5/2.5=1.0\n3. 5+1.0=6.0\n值为6.000000，以浮点数形式表示。'  
+},  
+{  
+    text: '已知i、j、k为int型变量,若从键盘输入:1,2,3<回车>,使i的值为1、j的值为2、k的值为3,以下选项中正确的输入语句是______。',  
+    options: ['scanf("%2d%2d%2d",&i,&j,&k);', 'scanf("%d %d %d",&i,&j,&k);', 'scanf("%d,%d,%d",&i,&j,&k);', 'scanf("i=%d,j=%d,k=%d",&i,&j,&k);'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'scanf("%d,%d,%d",&i,&j,&k);可以正确读取格式为"1,2,3"的输入，使i=1、j=2、k=3。格式字符串中的逗号匹配输入中的逗号。其他选项中：%2d限制读取的位数；"%d %d %d"需要空格分隔而不是逗号；"i=%d,j=%d,k=%d"需要输入格式为"i=1,j=2,k=3"。'  
+},  
+{  
+    text: '若有以下程序：\nmain()\n{\n  int k=2,i=2,m;\n  m=(k+=i*=k);\n  printf("%d,%d\\n",m,i);\n}',  
+    options: ['8，6', '8，3', '6，4', '7，4'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '计算m=(k+=i*=k)：\n1. i*=k相当于i=i*k=2*2=4\n2. k+=i相当于k=k+i=2+4=6\n3. m=6\n所以m=6，i=4\n\n但是答案显示m=8, i=3，这可能是因为计算顺序的理解不同。再次分析：\n如果按照普通赋值操作的结合性从右到左：\n1. i*=k相当于i=i*k=2*2=4，此时i=4\n2. k+=4相当于k=k+4=2+4=6，此时k=6\n3. m=6\n所以m=6，i=4\n\n题目给出的答案应该有误，或者有特殊的解释。'  
+},  
+{  
+    text: '设a、b、c、d、m、n均为int型变量，且a=5、b=6、c=7、d=8、m=2、n=2，则逻辑表达式(m=a>b)&&(n=c>d)运算后，n的值为______。',  
+    options: ['0', '1', '2', '3'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '分析(m=a>b)&&(n=c>d)：\n1. a>b为假(0)，所以m=0\n2. 由于&&是短路运算符，当左侧为假时，右侧不会被求值\n3. 所以(n=c>d)不会执行，n的值保持为2\n因此，n的最终值为2。'  
+},  
+{  
+    text: 't为int类型，进人下面的循环之前，t的值为0\nwhile( t=1 )\n{ ……}',  
+    options: ['循环控制表达式的值为0', '循环控制表达式的值为1', '循环控制表达式不合法', '以上说法都不对'],  
+    correctAnswer: 'B',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在while(t=1)中，t=1是赋值表达式，它将1赋给t，并返回赋值后的值1。在C语言中，非零值被视为真，所以循环条件恒为真，这将导致无限循环。循环控制表达式是合法的，它的值为1。'  
+},  
+{  
+    text: '以下程序中，while循环的循环次数是______\nmain()\n{\n  int  i=0;\n  while(i<10)\n  {\n    if(i<1)   continue;\n    if(i==5)  break;\n    i++;\n  }\n}',  
+    options: ['1', '4', '6', '死循环，不能确定次数'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '这是一个死循环。当i=0时，i<1为真，执行continue，直接跳到下一次循环而不执行i++，所以i始终为0，循环无法终止。死循环的关键是continue语句阻止了i的增加。'  
+},  
+{  
+    text: '以下函数的类型是______。\nfff(float x)\n{\n  return 5;\n}',  
+    options: ['与参数x的类型相同', 'void 类型', 'int类型', '无法确定'],  
+    correctAnswer: 'C',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '在C语言中，如果函数没有显式指定返回类型，默认为int类型。所以函数fff的返回类型是int。即使函数返回5，编译器也会将其视为int类型函数。返回类型与参数类型无关；void是明确指定的无返回值类型。'  
+},  
+{  
+    text: '结构化程序由三种基本结构组成，三种基本结构组成的算法______。',  
+    options: ['可以完成任何复杂的任务', '只能完成部分复杂的任务', '只能完成符合结构化的任务', '只能完成一些简单的任务'],  
+    correctAnswer: 'A',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '结构化程序设计的三种基本结构（顺序、选择、循环）可以组合成任何算法，完成任何复杂的编程任务。这是结构化程序设计的基本原理，也称为"结构定理"或"Böhm-Jacopini定理"。'  
+},  
+{  
+    text: '下列关于单目运算符++、--的叙述中正确的是______。',  
+    options: ['它们的运算对象可以是任何变量和常量', '它们的运算对象可以是char型变量和int型变量，但不能是float型变量', '它们的运算对象可以是int型变量，但不能是double型变量和float型变量', '它们的运算对象可以是char型变量、int型变量和float型变量'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: '单目运算符++和--的运算对象可以是任何数值类型的变量，包括char、int、float和double。关键是这些运算符只能用于变量，不能用于常量或表达式。例如，可以写i++，但不能写5++或(i+j)++。'  
+},  
+{  
+    text: '有以下程序段\nint n=0,p;\ndo\n{\n  scanf("%d",&p);\n  n++;\n}while(p!=12345&&n<3);',  
+    options: ['p的值不等于12345并且n的值小于3', 'p的值等于12345并且n的值大于等于3', 'p的值不等于12345或者n的值小于3', 'p的值等于12345或者n的值大于等于3'],  
+    correctAnswer: 'D',  
+    userAnswer: '',  
+    checked: false,  
+    counted: false,  
+    explanation: 'do-while循环的结束条件是while后面的表达式为假。表达式p!=12345&&n<3为假有两种情况：p=12345或n>=3。所以循环的结束条件是p的值等于12345或者n的值大于等于3。'  
+},   
+	</script> 
+	<script>  
+        function quizApp() {  
+            return {  
+                // 题目数据
+                questions: [],
+                
+                answeredCount: 0,  
+                correctCount: 0,  
+                incorrectCount: 0,  
+                accuracyRate: 0,  
+
+                init() {
+                    // 从script标签获取问题数据
+                    const questionsScript = document.getElementById('questionData');
+                    if (questionsScript) {
+                        try {
+                            const questionsText = questionsScript.textContent;
+                            // 将文本内容转换为有效的JSON格式
+                            const jsonText = '[' + questionsText + ']';
+                            
+                            // 解析JSON并初始化问题
+                            this.questions = eval(jsonText);
+                        } catch (e) {
+                            console.error("Error parsing questions: ", e);
+                            this.questions = [];
+                        }
+                    }
+                },
+                
+                checkAnswer(index) {  
+                    const question = this.questions[index];  
+                    if (question.userAnswer) {  
+                        question.checked = true;  
+                        
+                        // 只有第一次检查时才计入总数  
+                        if (!question.counted) {  
+                            this.answeredCount++;  
+                            question.counted = true;  
+                            
+                            if (question.userAnswer === question.correctAnswer) {  
+                                this.correctCount++;  
+                            } else {  
+                                this.incorrectCount++;  
+                            }  
+                        }  
+                        
+                        this.calculateAccuracy();  
+                    }  
+                },  
+                
+                calculateAccuracy() {  
+                    if (this.answeredCount > 0) {  
+                        this.accuracyRate = Math.round((this.correctCount / this.answeredCount) * 100);  
+                    }  
+                },  
+                
+                scrollToQuestion(questionNum) {  
+                    const element = document.getElementById('question-' + questionNum);  
+                    if (element) {  
+                        element.scrollIntoView({ behavior: 'smooth' });  
+                    }  
+                },  
+                
+                getJumpButtonClass(questionNum) {  
+                    // 检查该区域内的题目是否已回答  
+                    let allAnswered = true;  
+                    let anyAnswered = false;  
+                    let allCorrect = true;  
+                    
+                    for (let i = questionNum; i < questionNum + 5 && i <= this.questions.length; i++) {  
+                        if (this.questions[i-1] && this.questions[i-1].counted) {  
+                            anyAnswered = true;  
+                            if (this.questions[i-1].userAnswer !== this.questions[i-1].correctAnswer) {  
+                                allCorrect = false;  
+                            }  
+                        } else {  
+                            allAnswered = false;  
+                        }  
+                    }  
+                    
+                    if (allAnswered && allCorrect) return 'bg-green-500 text-white';  
+                    if (allAnswered) return 'bg-green-100 text-green-800';  
+                    if (anyAnswered) return 'bg-yellow-100 text-yellow-800';  
+                    return 'bg-gray-100 text-gray-800';  
+                },  
+                
+                printResults() {  
+                    // 首先强制检查所有已回答但未检查的题目  
+                    this.questions.forEach((question, index) => {  
+                        if (question.userAnswer && !question.checked) {  
+                            this.checkAnswer(index);  
+                        }  
+                    });  
+                    
+                    // 然后打印页面  
+                    window.print();  
+                }  
+            }  
+        }  
+    </script>  
+</body>  
+</html>

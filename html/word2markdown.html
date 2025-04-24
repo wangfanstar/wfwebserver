@@ -1,0 +1,711 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Word转Markdown工具</title>
+    <link href="tailwind.min.css" rel="stylesheet">
+    <!-- 引入必要的库 -->
+    <script src="mammoth.browser.min.js"></script>
+    <script src="turndown.js"></script>
+    <!-- 添加Markdown预览库 -->
+    <script src="marked.min.js"></script>
+    <style>
+        /* 预览样式 */
+        #markdown-preview {
+            line-height: 1.6;
+            color: #333;
+        }
+        #markdown-preview h1 {
+            font-size: 2em;
+            margin-top: 0.67em;
+            margin-bottom: 0.67em;
+            font-weight: bold;
+        }
+        #markdown-preview h2 {
+            font-size: 1.5em;
+            margin-top: 0.83em;
+            margin-bottom: 0.83em;
+            font-weight: bold;
+        }
+        #markdown-preview h3 {
+            font-size: 1.17em;
+            margin-top: 1em;
+            margin-bottom: 1em;
+            font-weight: bold;
+        }
+        #markdown-preview h4 {
+            font-size: 1em;
+            margin-top: 1.33em;
+            margin-bottom: 1.33em;
+            font-weight: bold;
+        }
+        #markdown-preview p {
+            margin-top: 1em;
+            margin-bottom: 1em;
+        }
+        #markdown-preview ul, #markdown-preview ol {
+            margin-top: 1em;
+            margin-bottom: 1em;
+            padding-left: 2em;
+        }
+        #markdown-preview ul {
+            list-style-type: disc;
+        }
+        #markdown-preview ol {
+            list-style-type: decimal;
+        }
+        #markdown-preview li {
+            margin-bottom: 0.5em;
+        }
+        #markdown-preview pre {
+            background-color: #f3f4f6;
+            border-radius: 6px;
+            padding: 1rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+            border: 1px solid #e5e7eb;
+        }
+        #markdown-preview code {
+            font-family: monospace;
+            background-color: #f3f4f6;
+            padding: 0.2rem 0.4rem;
+            border-radius: 3px;
+            font-size: 0.875em;
+        }
+        #markdown-preview pre code {
+            background-color: transparent;
+            padding: 0;
+            border-radius: 0;
+            display: block;
+        }
+        #markdown-preview img {
+            max-width: 100%;
+            height: auto;
+        }
+        #markdown-preview blockquote {
+            border-left: 4px solid #e5e7eb;
+            padding-left: 1em;
+            margin-left: 0;
+            color: #6b7280;
+        }
+        #markdown-preview table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: 1em 0;
+        }
+        #markdown-preview table th, #markdown-preview table td {
+            border: 1px solid #e5e7eb;
+            padding: 0.5em;
+            text-align: left;
+        }
+        #markdown-preview table th {
+            background-color: #f9fafb;
+            font-weight: bold;
+        }
+        
+        /* 图像错误样式 */
+        .img-error {
+            border: 1px dashed #ff5555;
+            padding: 0.5em;
+            margin: 0.5em 0;
+            color: #ff5555;
+            background-color: #fff5f5;
+            border-radius: 4px;
+            display: inline-block;
+        }
+        
+        /* 响应式调整 */
+        @media (max-width: 768px) {
+            .split-view {
+                flex-direction: column;
+            }
+            .split-view > div {
+                width: 100% !important;
+            }
+        }
+        
+        /* 日志区域样式 */
+        #conversion-log {
+            font-family: monospace;
+            font-size: 0.75rem;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            margin: 2px 0;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+        .log-info {
+            background-color: #f0f9ff;
+        }
+        .log-warning {
+            background-color: #fffbeb;
+            color: #854d0e;
+        }
+        .log-error {
+            background-color: #fef2f2;
+            color: #b91c1c;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="text-center mb-10">
+            <h1 class="text-3xl font-bold text-gray-800">Word转Markdown工具</h1>
+            <p class="text-gray-600 mt-2">上传Word文件(.docx)，自动转换为Markdown源码</p>
+        </header>
+        
+        <div class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="mb-4">
+                <label for="file-upload" class="block text-gray-700 font-medium mb-2">选择Word文档</label>
+                <input 
+                    type="file" 
+                    id="file-upload" 
+                    class="block w-full text-gray-700 border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    accept=".docx">
+                <p class="text-gray-500 text-sm mt-1">仅支持.docx格式</p>
+            </div>
+            
+            <div class="flex flex-wrap gap-4">
+                <button 
+                    id="convert-btn"
+                    class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
+                    转换为Markdown
+                </button>
+                
+                <div class="flex items-center">
+                    <input type="checkbox" id="include-images" class="mr-2" checked>
+                    <label for="include-images" class="text-gray-700">包含图像(Base64格式)</label>
+                </div>
+                
+                <div class="flex items-center" id="enhanced-container">
+                    <input type="checkbox" id="alternative-image-handling" class="mr-2" checked>
+                    <label for="alternative-image-handling" class="text-gray-700">使用增强图像处理</label>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 加载动画 -->
+        <div id="loading" class="text-center py-10 hidden">
+            <div class="inline-block animate-spin rounded-full h-8 w-8 border-4 border-gray-300 border-t-blue-600"></div>
+            <p class="mt-2 text-gray-600">正在转换中，请稍候...</p>
+            <p class="text-gray-500 text-sm">大文件或包含多张图像的文档可能需要较长时间</p>
+        </div>
+        
+        <!-- 转换日志区域 -->
+        <div id="log-container" class="bg-white rounded-lg shadow-md p-4 mb-6 hidden">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="font-semibold text-gray-800">转换日志</h3>
+                <button id="toggle-log" class="text-sm text-blue-600 hover:underline">折叠</button>
+            </div>
+            <div id="conversion-log"></div>
+        </div>
+        
+        <!-- 源码和预览的左右布局 -->
+        <div class="flex flex-wrap md:flex-nowrap split-view gap-4">
+            <!-- 左侧: Markdown源码 -->
+            <div class="bg-white rounded-lg shadow-md p-6 w-full md:w-1/2">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-xl font-semibold text-gray-800">Markdown源码</h2>
+                    <button 
+                        id="copy-btn" 
+                        class="bg-gray-200 hover:bg-gray-300 text-gray-700 font-medium py-1 px-3 rounded-lg text-sm hidden">
+                        复制源码
+                    </button>
+                </div>
+                <!-- 添加一个不可见的textarea用于复制 -->
+                <textarea id="copy-area" class="hidden"></textarea>
+                <pre id="markdown-output" class="bg-gray-50 rounded-md p-4 text-gray-800 whitespace-pre-wrap overflow-auto h-[500px] text-sm"></pre>
+            </div>
+            
+            <!-- 右侧: Markdown预览 -->
+            <div class="bg-white rounded-lg shadow-md p-6 w-full md:w-1/2">
+                <div class="flex justify-between items-center mb-3">
+                    <h2 class="text-xl font-semibold text-gray-800">预览效果</h2>
+                    <div class="text-sm text-gray-500">预览效果可能与实际渲染有差异</div>
+                </div>
+                <div id="markdown-preview" class="border rounded-md p-4 overflow-auto h-[500px]"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const fileUpload = document.getElementById('file-upload');
+            const convertBtn = document.getElementById('convert-btn');
+            const markdownOutput = document.getElementById('markdown-output');
+            const markdownPreview = document.getElementById('markdown-preview');
+            const copyBtn = document.getElementById('copy-btn');
+            const copyArea = document.getElementById('copy-area');
+            const loading = document.getElementById('loading');
+            const includeImages = document.getElementById('include-images');
+            const alternativeImageHandling = document.getElementById('alternative-image-handling');
+            const enhancedContainer = document.getElementById('enhanced-container');
+            const logContainer = document.getElementById('log-container');
+            const conversionLog = document.getElementById('conversion-log');
+            const toggleLogBtn = document.getElementById('toggle-log');
+            
+            // 根据"包含图像"选项更新"增强图像处理"选项的可见性
+            function updateEnhancedVisibility() {
+                if (includeImages.checked) {
+                    enhancedContainer.style.display = 'flex';
+                } else {
+                    enhancedContainer.style.display = 'none';
+                }
+            }
+            
+            // 初始设置
+            updateEnhancedVisibility();
+            
+            // 监听包含图像选项的变化
+            includeImages.addEventListener('change', updateEnhancedVisibility);
+            
+            // 日志系统
+            let imageSuccessCount = 0;
+            let imageFailureCount = 0;
+            let logEntries = [];
+            
+            function addLog(message, type = 'info') {
+                const entry = {
+                    message,
+                    type,
+                    timestamp: new Date()
+                };
+                logEntries.push(entry);
+                
+                // 显示日志条目
+                const entryElement = document.createElement('div');
+                entryElement.className = `log-entry log-${type}`;
+                entryElement.textContent = `[${entry.timestamp.toLocaleTimeString()}] ${message}`;
+                conversionLog.appendChild(entryElement);
+                
+                // 滚动到底部
+                conversionLog.scrollTop = conversionLog.scrollHeight;
+                
+                // 显示日志容器
+                logContainer.classList.remove('hidden');
+            }
+            
+            // 折叠/展开日志
+            toggleLogBtn.addEventListener('click', function() {
+                if (conversionLog.style.display === 'none') {
+                    conversionLog.style.display = 'block';
+                    toggleLogBtn.textContent = '折叠';
+                } else {
+                    conversionLog.style.display = 'none';
+                    toggleLogBtn.textContent = '展开';
+                }
+            });
+            
+            // 启用转换按钮当文件被选择
+            fileUpload.addEventListener('change', function() {
+                if(this.files.length > 0 && this.files[0].name.endsWith('.docx')) {
+                    convertBtn.disabled = false;
+                    addLog(`已选择文件: ${this.files[0].name} (${Math.round(this.files[0].size / 1024)} KB)`);
+                } else {
+                    convertBtn.disabled = true;
+                    alert('请选择有效的Word文档(.docx)');
+                    this.value = '';
+                }
+            });
+            
+            // 使用marked.js渲染Markdown预览
+            function renderMarkdownPreview(markdown) {
+                // 设置marked选项
+                marked.setOptions({
+                    breaks: true,        // 添加 <br> 在单行换行
+                    gfm: true,           // 使用GitHub风格Markdown
+                    headerIds: true,     // 标题ID
+                    mangle: false,       // 不转义标题文本
+                    smartLists: true,    // 使用更智能的列表行为
+                    smartypants: false,  // 不使用"智能"排版标点
+                    xhtml: false         // 不使用自闭合XHTML标签
+                });
+                
+                try {
+                    // 使用marked库渲染Markdown为HTML
+                    const html = marked.parse(markdown);
+                    markdownPreview.innerHTML = html;
+                    
+                    // 如果包含图像，检查图像加载情况
+                    if (includeImages.checked) {
+                        const images = markdownPreview.querySelectorAll('img');
+                        if (images.length > 0) {
+                            addLog(`预览中共有 ${images.length} 张图像`, 'info');
+                            
+                            // 检查每个图像的加载情况
+                            images.forEach((img, index) => {
+                                img.onerror = function() {
+                                    addLog(`图像 #${index+1} 加载失败`, 'error');
+                                    // 替换为错误提示
+                                    const errorSpan = document.createElement('span');
+                                    errorSpan.className = 'img-error';
+                                    errorSpan.textContent = `[图像加载失败 #${index+1}]`;
+                                    img.parentNode.replaceChild(errorSpan, img);
+                                };
+                                
+                                img.onload = function() {
+                                    addLog(`图像 #${index+1} 加载成功 (${img.naturalWidth}x${img.naturalHeight})`, 'info');
+                                };
+                            });
+                        }
+                    }
+                } catch (error) {
+                    console.error('预览渲染失败:', error);
+                    markdownPreview.innerHTML = '<p class="text-red-500">预览渲染失败: ' + error.message + '</p>';
+                    addLog('预览渲染失败: ' + error.message, 'error');
+                }
+            }
+            
+            // 转换按钮点击事件
+            convertBtn.addEventListener('click', function() {
+                const file = fileUpload.files[0];
+                if(!file) return;
+                
+                // 重置日志
+                logEntries = [];
+                conversionLog.innerHTML = '';
+                imageSuccessCount = 0;
+                imageFailureCount = 0;
+                
+                // 显示加载状态
+                loading.classList.remove('hidden');
+                markdownOutput.textContent = '';
+                copyBtn.classList.add('hidden');
+                markdownPreview.innerHTML = '';
+                
+                addLog(`开始转换文件: ${file.name}`, 'info');
+                
+                // 读取文件并转换
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    // 配置mammoth选项
+                    const options = {
+                        arrayBuffer: e.target.result,
+                        styleMap: [
+                            // 帮助识别代码块的样式映射
+                            "p[style-name='Code'] => pre:separator('\n')",
+                            "p[style-name='代码'] => pre:separator('\n')",
+                            "p[style-name='Source Code'] => pre:separator('\n')",
+                            "p[style-name='源代码'] => pre:separator('\n')",
+                            // 常见的代码块样式名
+                            "p[style-name*='code'] => pre:separator('\n')",
+                            "p[style-name*='Code'] => pre:separator('\n')",
+                            "p[style-name*='代码'] => pre:separator('\n')"
+                        ]
+                    };
+                    
+                    // 当不包含图像时，使用图像排除转换器
+                    if (!includeImages.checked) {
+                        addLog('图像处理已禁用，所有图像将被排除', 'info');
+                        
+                        // 使用图像排除转换器
+                        options.convertImage = mammoth.images.imgElement(function(image) {
+                            // 返回空内容，完全排除图像
+                            return Promise.resolve(null);
+                        });
+                    }
+                    // 包含图像的情况
+                    else {
+                        addLog('图像处理已启用', 'info');
+                        
+                        if (alternativeImageHandling.checked) {
+                            addLog('使用增强图像处理模式', 'info');
+                            
+                            // 增强版图像处理
+                            options.convertImage = mammoth.images.imgElement(function(image) {
+                                addLog(`开始处理图像: ${image.contentType || "未知类型"}`, 'info');
+                                
+                                return image.read("base64")
+                                    .then(function(imageBuffer) {
+                                        // 检查buffer是否有效
+                                        if (!imageBuffer || imageBuffer.length === 0) {
+                                            imageFailureCount++;
+                                            addLog(`图像数据为空或无效`, 'error');
+                                            return { src: "", 'data-error': "无效图像数据" };
+                                        }
+                                        
+                                        // 尝试获取更可靠的MIME类型
+                                        let mimeType = image.contentType || "";
+                                        
+                                        // 如果没有MIME类型或无法识别，尝试基于二进制数据推断
+                                        if (!mimeType || mimeType === "image") {
+                                            // 检查PNG文件头
+                                            if (imageBuffer.startsWith("iVBORw0KGg")) {
+                                                mimeType = "image/png";
+                                            } 
+                                            // 检查JPEG文件头
+                                            else if (imageBuffer.startsWith("/9j/4AA")) {
+                                                mimeType = "image/jpeg";
+                                            }
+                                            // 检查GIF文件头 
+                                            else if (imageBuffer.startsWith("R0lGOD")) {
+                                                mimeType = "image/gif";
+                                            }
+                                            // 默认类型
+                                            else {
+                                                mimeType = "image/png";
+                                            }
+                                            
+                                            addLog(`自动检测图像类型: ${mimeType}`, 'info');
+                                        }
+                                        
+                                        imageSuccessCount++;
+                                        return {
+                                            src: "data:" + mimeType + ";base64," + imageBuffer,
+                                            'data-original-type': image.contentType || "未知"
+                                        };
+                                    })
+                                    .catch(function(error) {
+                                        imageFailureCount++;
+                                        addLog(`图像处理失败: ${error.message}`, 'error');
+                                        // 返回错误占位符
+                                        return { 
+                                            src: "", 
+                                            'data-error': error.message,
+                                            alt: "[图像处理失败]"
+                                        };
+                                    });
+                            });
+                        } else {
+                            // 标准图像处理
+                            addLog('使用标准图像处理模式', 'info');
+                            options.convertImage = mammoth.images.imgElement(function(image) {
+                                return image.read("base64").then(function(imageBuffer) {
+                                    // 获取图像MIME类型
+                                    const mimeType = image.contentType || "image/png"; 
+                                    // 创建base64 URL
+                                    return {
+                                        src: "data:" + mimeType + ";base64," + imageBuffer
+                                    };
+                                });
+                            });
+                        }
+                    }
+                    
+                    // 使用mammoth将Word转为HTML
+                    mammoth.convertToHtml(options)
+                        .then(function(result) {
+                            addLog(`HTML转换完成，字符数: ${result.value.length}`, 'info');
+                            
+                            // 如有警告信息
+                            if (result.messages.length > 0) {
+                                result.messages.forEach(message => {
+                                    addLog(`Mammoth警告: ${message.message} (${message.type})`, 'warning');
+                                });
+                            }
+                            
+                            // 增强HTML以更好地识别代码块
+                            let processedHtml = result.value;
+                            
+                            // 处理图像错误情况
+                            processedHtml = processedHtml.replace(/<img[^>]*data-error="([^"]*)"[^>]*>/g, function(match, errorMessage) {
+                                return `<span class="img-error">[图像处理失败: ${errorMessage}]</span>`;
+                            });
+                            
+                            // 如果不包含图像，移除所有图像标签
+                            if (!includeImages.checked) {
+                                // 查找并移除所有图片元素
+                                const tempDiv = document.createElement('div');
+                                tempDiv.innerHTML = processedHtml;
+                                
+                                const images = tempDiv.querySelectorAll('img');
+                                if (images.length > 0) {
+                                    addLog(`移除了 ${images.length} 个图像元素`, 'info');
+                                    images.forEach(img => img.parentNode.removeChild(img));
+                                }
+                                
+                                processedHtml = tempDiv.innerHTML;
+                            }
+                            
+                            // 查找可能的代码块并添加更明确的标记
+                            // 查找<pre>标签并确保它们被正确包装
+                            processedHtml = processedHtml.replace(/<pre>([\s\S]*?)<\/pre>/g, function(match, codeContent) {
+                                return '<pre><code>' + codeContent + '</code></pre>';
+                            });
+                            
+                            // 使用turndown将HTML转换为Markdown
+                            const turndownService = new TurndownService({
+                                headingStyle: 'atx',
+                                codeBlockStyle: 'fenced' // 明确使用围栏式代码块
+                            });
+                            
+                            // 添加自定义规则处理表格
+                            turndownService.addRule('tables', {
+                                filter: 'table',
+                                replacement: function(content, node) {
+                                    // 这里可以添加更复杂的表格处理逻辑
+                                    return '\n\n' + content + '\n\n';
+                                }
+                            });
+                            
+                            // 只有当包含图像时，才添加图像处理规则
+                            if (includeImages.checked) {
+                                // 保留图像
+                                turndownService.addRule('images', {
+                                    filter: 'img',
+                                    replacement: function(content, node) {
+                                        const src = node.getAttribute('src') || '';
+                                        const alt = node.getAttribute('alt') || '';
+                                        
+                                        // 检查是否是空图像（无效的）
+                                        if (!src || src === '') {
+                                            const errorMsg = node.getAttribute('data-error') || '未知错误';
+                                            return `\n\n[图像加载失败: ${errorMsg}]\n\n`;
+                                        }
+                                        
+                                        return `![${alt}](${src})`;
+                                    }
+                                });
+                                
+                                // 处理图像错误消息
+                                turndownService.addRule('imageErrors', {
+                                    filter: function(node) {
+                                        return (
+                                            node.nodeName === 'SPAN' && 
+                                            node.classList.contains('img-error')
+                                        );
+                                    },
+                                    replacement: function(content, node) {
+                                        return `\n\n${content}\n\n`;
+                                    }
+                                });
+                            } else {
+                                // 不包含图像时，确保排除所有图像
+                                turndownService.remove('img');
+                            }
+                            
+                            // 特别处理代码块
+                            turndownService.addRule('codeBlocks', {
+                                filter: function(node, options) {
+                                    return (
+                                        node.nodeName === 'PRE' && 
+                                        node.firstChild && 
+                                        node.firstChild.nodeName === 'CODE'
+                                    );
+                                },
+                                replacement: function(content, node, options) {
+                                    // 检测代码块语言
+                                    const code = node.firstChild;
+                                    const language = code.getAttribute('class') || '';
+                                    const langMatch = language.match(/language-(\w+)/);
+                                    const lang = langMatch ? langMatch[1] : '';
+                                    
+                                    // 删除前后多余的空行
+                                    let codeContent = code.textContent.trim();
+                                    
+                                    // 返回带围栏的代码块
+                                    return '\n\n```' + lang + '\n' + codeContent + '\n```\n\n';
+                                }
+                            });
+                            
+                            // 单行代码
+                            turndownService.addRule('inlineCode', {
+                                filter: function(node) {
+                                    return (
+                                        node.nodeName === 'CODE' && 
+                                        node.parentNode.nodeName !== 'PRE'
+                                    );
+                                },
+                                replacement: function(content) {
+                                    return '`' + content + '`';
+                                }
+                            });
+                            
+                            const markdown = turndownService.turndown(processedHtml);
+                            
+                            // 图像统计
+                            if (includeImages.checked && (imageSuccessCount > 0 || imageFailureCount > 0)) {
+                                addLog(`图像转换统计: ${imageSuccessCount} 成功, ${imageFailureCount} 失败`, imageFailureCount > 0 ? 'warning' : 'info');
+                            }
+                            addLog('Markdown转换完成', 'info');
+                            
+                            // 显示转换后的Markdown
+                            markdownOutput.textContent = markdown;
+                            copyBtn.classList.remove('hidden');
+                            loading.classList.add('hidden');
+                            
+                            // 渲染预览
+                            renderMarkdownPreview(markdown);
+                        })
+                        .catch(function(error) {
+                            addLog(`转换失败: ${error.message}`, 'error');
+                            markdownOutput.textContent = '转换失败: ' + error.message;
+                            loading.classList.add('hidden');
+                        });
+                };
+                reader.readAsArrayBuffer(file);
+            });
+            
+            // 复制按钮功能
+            copyBtn.addEventListener('click', function() {
+                const markdown = markdownOutput.textContent;
+                
+                // 尝试多种复制方法
+                try {
+                    // 方法1: 使用现代剪贴板API
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(markdown).then(() => {
+                            showCopySuccess();
+                        }).catch(() => {
+                            // 如果失败，尝试回退到其他方法
+                            fallbackCopy(markdown);
+                        });
+                    } else {
+                        // 方法2: 传统的document.execCommand方法
+                        fallbackCopy(markdown);
+                    }
+                } catch (err) {
+                    console.error('复制失败:', err);
+                    alert('复制失败, 请手动选择文本并复制 (Ctrl+C/Cmd+C)');
+                }
+            });
+            
+            // 回退复制方法
+            function fallbackCopy(text) {
+                // 使用textarea元素
+                copyArea.value = text;
+                copyArea.style.position = 'fixed';
+                copyArea.style.left = '0';
+                copyArea.style.top = '0';
+                copyArea.style.opacity = '0';
+                copyArea.style.pointerEvents = 'none';
+                copyArea.classList.remove('hidden');
+                
+                copyArea.focus();
+                copyArea.select();
+                
+                try {
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                        showCopySuccess();
+                    } else {
+                        throw new Error('复制命令未成功执行');
+                    }
+                } catch (err) {
+                    console.error('Fallback复制失败:', err);
+                    alert('复制失败, 请手动选择文本并复制 (Ctrl+C/Cmd+C)');
+                } finally {
+                    copyArea.classList.add('hidden');
+                }
+            }
+            
+            // 显示复制成功的反馈
+            function showCopySuccess() {
+                const originalText = copyBtn.textContent;
+                copyBtn.textContent = '已复制!';
+                copyBtn.classList.add('bg-green-200');
+                
+                setTimeout(() => {
+                    copyBtn.textContent = originalText;
+                    copyBtn.classList.remove('bg-green-200');
+                }, 2000);
+            }
+        });
+    </script>
+</body>
+</html>

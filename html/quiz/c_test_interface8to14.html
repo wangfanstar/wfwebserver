@@ -1,0 +1,1693 @@
+<!DOCTYPE html>  
+<html lang="zh-CN">  
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+    <title>C 语言编程测试 接口组 8 - 14 </title>  
+    <link href="../tailwind.min.css" rel="stylesheet">  
+    <script src="../alpine.min.js" defer></script>  
+    <script src="../marked.min.js"></script>  
+    <style>  
+        [x-cloak] { display: none !important; }  
+        pre {  
+            background-color: #f5f5f5;  
+            border-radius: 0.25rem;  
+            padding: 1rem;  
+            margin: 1rem 0;  
+            overflow-x: auto;  
+        }  
+        code {  
+            font-family: monospace;  
+            background-color: #f5f5f5;  
+            padding: 0.125rem 0.25rem;  
+            border-radius: 0.25rem;  
+        }  
+        .question-section {  
+            scroll-margin-top: 1rem;  
+        }  
+        .selected-option {  
+            border: 2px solid #2563eb;  
+            background-color: #eff6ff;  
+        }  
+        .progress-box {  
+            position: fixed;  
+            top: 1rem;  
+            right: 1rem;  
+            z-index: 50;  
+            width: 250px;  
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);  
+            border-radius: 0.5rem;  
+        }  
+        @media (max-width: 768px) {  
+            .progress-box {  
+                position: static;  
+                width: 100%;  
+                margin-bottom: 1rem;  
+            }  
+        }  
+    </style>  
+</head>  
+<body class="bg-gray-50 min-h-screen" x-data="quizApp()">  
+    <div class="flex flex-col md:flex-row">  
+        <!-- 左侧边栏 -->  
+        <div class="bg-white w-full md:w-64 lg:w-72 md:fixed md:h-screen shadow-md p-4 overflow-y-auto">  
+		            <!-- 返回主测试页面按钮 -->  
+            <div class="flex items-center mb-4">  
+                <a href="./index.html" class="flex items-center text-blue-600 hover:text-blue-800 mr-2">  
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                        <path fill-rule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clip-rule="evenodd" />  
+                    </svg>  
+                    返回主页  
+                </a>  
+            </div>  
+            <h1 class="text-xl font-bold mb-4 text-blue-700">C 语言测试 接口组 8 - 14 </h1>  
+            
+            <!-- 主题分类 -->  
+            <div class="mb-4">  
+                <h2 class="text-lg font-semibold mb-2">主题分类</h2>  
+                <div class="space-y-2">  
+                    <button   
+                        @click="currentCategory = '结构体'; scrollToQuestion(0)"   
+                        class="block w-full text-left px-3 py-2 rounded"   
+                        :class="currentCategory === '结构体' ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'">  
+                        01 - 10 结构体  
+                    </button>  
+                    <button   
+                        @click="currentCategory = '联合体'; scrollToQuestion(10)"   
+                        class="block w-full text-left px-3 py-2 rounded"   
+                        :class="currentCategory === '联合体' ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'">  
+                        11 - 20 联合体  
+                    </button>  
+                    <button   
+                        @click="currentCategory = '枚举类型'; scrollToQuestion(20)"   
+                        class="block w-full text-left px-3 py-2 rounded"   
+                        :class="currentCategory === '枚举类型' ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'">  
+                        21 - 30 枚举类型  
+                    </button>  
+                    <button   
+                        @click="currentCategory = '内存管理'; scrollToQuestion(30)"   
+                        class="block w-full text-left px-3 py-2 rounded"   
+                        :class="currentCategory === '内存管理' ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'">  
+                        31 - 40 内存管理  
+                    </button>  
+                    <button   
+                        @click="currentCategory = '文件与IO'; scrollToQuestion(40)"   
+                        class="block w-full text-left px-3 py-2 rounded"   
+                        :class="currentCategory === '文件与IO' ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'">  
+                        41 - 50 文件与IO  
+                    </button>  
+                    <button   
+                        @click="currentCategory = '位操作、位域'; scrollToQuestion(50)"   
+                        class="block w-full text-left px-3 py-2 rounded"   
+                        :class="currentCategory === '位操作、位域' ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'">  
+                        51 - 60 位操作、位域  
+                    </button>  
+                    <button   
+                        @click="currentCategory = '并发编程'; scrollToQuestion(60)"   
+                        class="block w-full text-left px-3 py-2 rounded"   
+                        :class="currentCategory === '并发编程' ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'">  
+                        61 - 70 并发编程  
+                    </button>  
+                </div>  
+            </div>  
+            
+            <!-- 题目导航 -->  
+            <div>  
+                <h2 class="text-lg font-semibold mb-2">题目导航</h2>  
+                
+                <!-- 分页控制 -->  
+                <div class="flex justify-between mb-3">  
+                    <button   
+                        @click="currentNavPage = 1"   
+                        class="px-2 py-1 text-sm rounded"  
+                        :class="currentNavPage === 1 ? 'bg-blue-500 text-white' : 'bg-gray-200 hover:bg-gray-300'">  
+                        1-30  
+                    </button>  
+                    <button   
+                        @click="currentNavPage = 2"   
+                        class="px-2 py-1 text-sm rounded"  
+                        :class="currentNavPage === 2 ? 'bg-blue-500 text-white' : 'bg-gray-200 hover:bg-gray-300'">  
+                        31-60  
+                    </button>  
+                    <button   
+                        @click="currentNavPage = 3"   
+                        class="px-2 py-1 text-sm rounded"  
+                        :class="currentNavPage === 3 ? 'bg-blue-500 text-white' : 'bg-gray-200 hover:bg-gray-300'">  
+                        61-70  
+                    </button>  
+                </div>  
+                
+                <!-- 页面1：题目1-30 -->  
+                <div x-show="currentNavPage === 1" class="grid grid-cols-5 gap-2 mb-4">  
+                    <template x-for="index in 30" :key="index - 1">  
+                        <a   
+                            @click.prevent="scrollToQuestion(index - 1)"  
+                            class="cursor-pointer flex items-center justify-center w-8 h-8 rounded-md shadow-sm text-sm font-medium transition-colors"  
+                            :class="{  
+                                'bg-green-500 text-white': questions[index-1] && questions[index-1].isAnswered && questions[index-1].isCorrect,  
+                                'bg-red-500 text-white': questions[index-1] && questions[index-1].isAnswered && !questions[index-1].isCorrect,  
+                                'bg-gray-200 hover:bg-gray-300': !questions[index-1] || !questions[index-1].isAnswered  
+                            }"  
+                            x-text="index"></a>  
+                    </template>  
+                </div>  
+                
+                <!-- 页面2：题目31-60 -->  
+                <div x-show="currentNavPage === 2" class="grid grid-cols-5 gap-2 mb-4">  
+                    <template x-for="i in 30" :key="i + 30 - 1">  
+                        <a   
+                            @click.prevent="scrollToQuestion(i + 30 - 1)"  
+                            class="cursor-pointer flex items-center justify-center w-8 h-8 rounded-md shadow-sm text-sm font-medium transition-colors"  
+                            :class="{  
+                                'bg-green-500 text-white': questions[i+30-1] && questions[i+30-1].isAnswered && questions[i+30-1].isCorrect,  
+                                'bg-red-500 text-white': questions[i+30-1] && questions[i+30-1].isAnswered && !questions[i+30-1].isCorrect,  
+                                'bg-gray-200 hover:bg-gray-300': !questions[i+30-1] || !questions[i+30-1].isAnswered  
+                            }"  
+                            x-text="i + 30"></a>  
+                    </template>  
+                </div>  
+                
+                <!-- 页面3：题目61-70 -->  
+                <div x-show="currentNavPage === 3" class="grid grid-cols-5 gap-2 mb-4">  
+                    <template x-for="i in 10" :key="i + 60 - 1">  
+                        <a   
+                            @click.prevent="scrollToQuestion(i + 60 - 1)"  
+                            class="cursor-pointer flex items-center justify-center w-8 h-8 rounded-md shadow-sm text-sm font-medium transition-colors"  
+                            :class="{  
+                                'bg-green-500 text-white': questions[i+60-1] && questions[i+60-1].isAnswered && questions[i+60-1].isCorrect,  
+                                'bg-red-500 text-white': questions[i+60-1] && questions[i+60-1].isAnswered && !questions[i+60-1].isCorrect,  
+                                'bg-gray-200 hover:bg-gray-300': !questions[i+60-1] || !questions[i+60-1].isAnswered  
+                            }"  
+                            x-text="i + 60"></a>  
+                    </template>  
+                </div>  
+            </div>  
+        </div>  
+        
+        <!-- 右侧内容区 -->  
+        <div class="w-full md:ml-64 lg:ml-72 p-4 md:p-6">  
+            <!-- 固定在右上角的测试进度框 -->  
+            <div class="progress-box bg-white md:bg-white/90 p-4">  
+                <h2 class="text-lg font-semibold mb-2">测试进度</h2>  
+                <div class="space-y-3">  
+                    <div>  
+                        <div class="flex justify-between mb-1">  
+                            <span>完成度</span>  
+                            <span x-text="answeredCount + '/' + questions.length"></span>  
+                        </div>  
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">  
+                            <div class="bg-blue-600 h-2.5 rounded-full" x-bind:style="'width: ' + (answeredCount / questions.length * 100) + '%'"></div>  
+                        </div>  
+                    </div>  
+                    <div class="flex items-center space-x-2">  
+                        <div class="flex items-center">  
+                            <div class="w-3 h-3 bg-green-500 rounded-full mr-1"></div>  
+                            <span x-text="correctCount"></span>  
+                        </div>  
+                        <span>正确</span>  
+                    </div>  
+                    <div class="flex items-center space-x-2">  
+                        <div class="flex items-center">  
+                            <div class="w-3 h-3 bg-red-500 rounded-full mr-1"></div>  
+                            <span x-text="answeredCount - correctCount"></span>  
+                        </div>  
+                        <span>错误</span>  
+                    </div>  
+                </div>  
+            </div>  
+
+            <!-- 基础语法题目 -->  
+            <div class="mt-16 md:mt-0"> <!-- 在移动设备上添加顶部边距，给进度框留出空间 -->  
+                <h2 class="text-2xl font-bold mb-6 pb-2 border-b-2 border-blue-500">1-结构体</h2>  
+                <div class="space-y-8">  
+                    <template x-for="(question, index) in questions.slice(0, 10)" :key="index">  
+                        <div :id="'question-' + index" class="bg-white rounded-lg shadow-md p-6 question-section">  
+                            <h3 class="text-lg font-semibold mb-3" x-text="'0' + (index + 1) + '.'"></h3>  
+                            <div class="mb-4" x-html="marked.parse(question.content)"></div>  
+                            
+                            <div class="space-y-2 mb-4">  
+                                <template x-for="(option, optIndex) in ['A', 'B', 'C', 'D']" :key="optIndex">  
+                                    <div   
+                                        class="flex items-start p-3 rounded-md cursor-pointer hover:bg-gray-100 transition-colors"  
+                                        :class="isOptionSelected(index, option) ? 'selected-option' : ''"  
+                                        @click="toggleOption(index, option)">  
+                                        <div class="w-8 h-8 flex-shrink-0 rounded-full bg-gray-200 flex items-center justify-center mr-3">  
+                                            <span x-text="option"></span>  
+                                        </div>  
+                                        <div x-text="question.options[optIndex]"></div>  
+                                    </div>  
+                                </template>  
+                            </div>  
+                            
+                            <div class="flex items-center justify-between">  
+                                <div>  
+                                    <button   
+                                        @click="checkAnswer(index)"  
+                                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">  
+                                        检查答案  
+                                    </button>  
+                                </div>  
+                                
+                                <div x-show="question.isAnswered" class="flex items-center" x-transition>  
+                                    <div x-show="question.isCorrect" class="text-green-600 flex items-center">  
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />  
+                                        </svg>  
+                                        正确  
+                                    </div>  
+                                    <div x-show="!question.isCorrect" class="text-red-600 flex items-center">  
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />  
+                                        </svg>  
+                                        错误  
+                                    </div>  
+                                </div>  
+                            </div>  
+                            
+                            <div x-show="question.isAnswered" class="mt-4">  
+                                <div class="bg-blue-50 border-l-4 border-blue-500 p-4">  
+                                    <div class="font-medium">正确答案：<span x-text="question.answer"></span></div>  
+                                    <div class="mt-2" x-html="marked.parse(question.explanation)"></div>  
+                                </div>  
+                            </div>  
+                        </div>  
+                    </template>  
+                </div>  
+            </div>  
+            
+            <!-- 其他题目类别的部分保持不变 -->  
+            <!-- 控制结构题目 -->  
+            <div class="mt-10">  
+                <h2 class="text-2xl font-bold mb-6 pb-2 border-b-2 border-blue-500">2-联合体</h2>  
+                <div class="space-y-8">  
+                    <template x-for="(question, index) in questions.slice(10, 20)" :key="index + 10">  
+                        <div :id="'question-' + (index + 10)" class="bg-white rounded-lg shadow-md p-6 question-section">  
+                            <h3 class="text-lg font-semibold mb-3" x-text="'0' + (index + 1) + '.'"></h3>  
+                            <div class="mb-4" x-html="marked.parse(question.content)"></div>  
+                            
+                            <div class="space-y-2 mb-4">  
+                                <template x-for="(option, optIndex) in ['A', 'B', 'C', 'D']" :key="optIndex">  
+                                    <div   
+                                        class="flex items-start p-3 rounded-md cursor-pointer hover:bg-gray-100 transition-colors"  
+                                        :class="isOptionSelected(index + 10, option) ? 'selected-option' : ''"  
+                                        @click="toggleOption(index + 10, option)">  
+                                        <div class="w-8 h-8 flex-shrink-0 rounded-full bg-gray-200 flex items-center justify-center mr-3">  
+                                            <span x-text="option"></span>  
+                                        </div>  
+                                        <div x-text="question.options[optIndex]"></div>  
+                                    </div>  
+                                </template>  
+                            </div>  
+                            
+                            <div class="flex items-center justify-between">  
+                                <div>  
+                                    <button   
+                                        @click="checkAnswer(index + 10)"  
+                                        class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">  
+                                        检查答案  
+                                    </button>  
+                                </div>  
+                                
+                                <div x-show="question.isAnswered" class="flex items-center" x-transition>  
+                                    <div x-show="question.isCorrect" class="text-green-600 flex items-center">  
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />  
+                                        </svg>  
+                                        正确  
+                                    </div>  
+                                    <div x-show="!question.isCorrect" class="text-red-600 flex items-center">  
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />  
+                                        </svg>  
+                                        错误  
+                                    </div>  
+                                </div>  
+                            </div>  
+                            
+                            <div x-show="question.isAnswered" class="mt-4">  
+                                <div class="bg-blue-50 border-l-4 border-blue-500 p-4">  
+                                    <div class="font-medium">正确答案：<span x-text="question.answer"></span></div>  
+                                    <div class="mt-2" x-html="marked.parse(question.explanation)"></div>  
+                                </div>  
+                            </div>  
+                        </div>  
+                    </template>  
+                </div>  
+            </div>  
+ 
+<!-- 函数题目 -->  
+<div class="mt-10">  
+    <h2 class="text-2xl font-bold mb-6 pb-2 border-b-2 border-blue-500">3-枚举类型</h2>  
+    <div class="space-y-8">  
+        <template x-for="(question, index) in questions.slice(20, 30)" :key="index + 20">  
+            <div :id="'question-' + (index + 20)" class="bg-white rounded-lg shadow-md p-6 question-section">  
+                <h3 class="text-lg font-semibold mb-3" x-text="'0' + (index + 1) + '.'"></h3>  
+                <div class="mb-4" x-html="marked.parse(question.content)"></div>  
+                
+                <div class="space-y-2 mb-4">  
+                    <template x-for="(option, optIndex) in ['A', 'B', 'C', 'D']" :key="optIndex">  
+                        <div   
+                            class="flex items-start p-3 rounded-md cursor-pointer hover:bg-gray-100 transition-colors"  
+                            :class="isOptionSelected(index + 20, option) ? 'selected-option' : ''"  
+                            @click="toggleOption(index + 20, option)">  
+                            <div class="w-8 h-8 flex-shrink-0 rounded-full bg-gray-200 flex items-center justify-center mr-3">  
+                                <span x-text="option"></span>  
+                            </div>  
+                            <div x-text="question.options[optIndex]"></div>  
+                        </div>  
+                    </template>  
+                </div>  
+                
+                <div class="flex items-center justify-between">  
+                    <div>  
+                        <button   
+                            @click="checkAnswer(index + 20)"  
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">  
+                            检查答案  
+                        </button>  
+                    </div>  
+                    
+                    <div x-show="question.isAnswered" class="flex items-center" x-transition>  
+                        <div x-show="question.isCorrect" class="text-green-600 flex items-center">  
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />  
+                            </svg>  
+                            正确  
+                        </div>  
+                        <div x-show="!question.isCorrect" class="text-red-600 flex items-center">  
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />  
+                            </svg>  
+                            错误  
+                        </div>  
+                    </div>  
+                </div>  
+                
+                <div x-show="question.isAnswered" class="mt-4">  
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4">  
+                        <div class="font-medium">正确答案：<span x-text="question.answer"></span></div>  
+                        <div class="mt-2" x-html="marked.parse(question.explanation)"></div>  
+                    </div>  
+                </div>  
+            </div>  
+        </template>  
+    </div>  
+</div>  
+
+<!-- 标准库函数题目 -->  
+<div class="mt-10">  
+    <h2 class="text-2xl font-bold mb-6 pb-2 border-b-2 border-blue-500">4-内存管理</h2>  
+    <div class="space-y-8">  
+        <template x-for="(question, index) in questions.slice(30, 40)" :key="index + 30">  
+            <div :id="'question-' + (index + 30)" class="bg-white rounded-lg shadow-md p-6 question-section">  
+                <h3 class="text-lg font-semibold mb-3" x-text="'0' + (index + 1) + '.'"></h3>  
+                <div class="mb-4" x-html="marked.parse(question.content)"></div>  
+                
+                <div class="space-y-2 mb-4">  
+                    <template x-for="(option, optIndex) in ['A', 'B', 'C', 'D']" :key="optIndex">  
+                        <div   
+                            class="flex items-start p-3 rounded-md cursor-pointer hover:bg-gray-100 transition-colors"  
+                            :class="isOptionSelected(index + 30, option) ? 'selected-option' : ''"  
+                            @click="toggleOption(index + 30, option)">  
+                            <div class="w-8 h-8 flex-shrink-0 rounded-full bg-gray-200 flex items-center justify-center mr-3">  
+                                <span x-text="option"></span>  
+                            </div>  
+                            <div x-text="question.options[optIndex]"></div>  
+                        </div>  
+                    </template>  
+                </div>  
+                
+                <div class="flex items-center justify-between">  
+                    <div>  
+                        <button   
+                            @click="checkAnswer(index + 30)"  
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">  
+                            检查答案  
+                        </button>  
+                    </div>  
+                    
+                    <div x-show="question.isAnswered" class="flex items-center" x-transition>  
+                        <div x-show="question.isCorrect" class="text-green-600 flex items-center">  
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />  
+                            </svg>  
+                            正确  
+                        </div>  
+                        <div x-show="!question.isCorrect" class="text-red-600 flex items-center">  
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />  
+                            </svg>  
+                            错误  
+                        </div>  
+                    </div>  
+                </div>  
+                
+                <div x-show="question.isAnswered" class="mt-4">  
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4">  
+                        <div class="font-medium">正确答案：<span x-text="question.answer"></span></div>  
+                        <div class="mt-2" x-html="marked.parse(question.explanation)"></div>  
+                    </div>  
+                </div>  
+            </div>  
+        </template>  
+    </div>  
+</div>  
+
+<!-- 数组与字符串题目 -->  
+<div class="mt-10">  
+    <h2 class="text-2xl font-bold mb-6 pb-2 border-b-2 border-blue-500">5-文件与IO</h2>  
+    <div class="space-y-8">  
+        <template x-for="(question, index) in questions.slice(40, 50)" :key="index + 40">  
+            <div :id="'question-' + (index + 40)" class="bg-white rounded-lg shadow-md p-6 question-section">  
+                <h3 class="text-lg font-semibold mb-3" x-text="'0' + (index + 1) + '.'"></h3>  
+                <div class="mb-4" x-html="marked.parse(question.content)"></div>  
+                
+                <div class="space-y-2 mb-4">  
+                    <template x-for="(option, optIndex) in ['A', 'B', 'C', 'D']" :key="optIndex">  
+                        <div   
+                            class="flex items-start p-3 rounded-md cursor-pointer hover:bg-gray-100 transition-colors"  
+                            :class="isOptionSelected(index + 40, option) ? 'selected-option' : ''"  
+                            @click="toggleOption(index + 40, option)">  
+                            <div class="w-8 h-8 flex-shrink-0 rounded-full bg-gray-200 flex items-center justify-center mr-3">  
+                                <span x-text="option"></span>  
+                            </div>  
+                            <div x-text="question.options[optIndex]"></div>  
+                        </div>  
+                    </template>  
+                </div>  
+                
+                <div class="flex items-center justify-between">  
+                    <div>  
+                        <button   
+                            @click="checkAnswer(index + 40)"  
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">  
+                            检查答案  
+                        </button>  
+                    </div>  
+                    
+                    <div x-show="question.isAnswered" class="flex items-center" x-transition>  
+                        <div x-show="question.isCorrect" class="text-green-600 flex items-center">  
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />  
+                            </svg>  
+                            正确  
+                        </div>  
+                        <div x-show="!question.isCorrect" class="text-red-600 flex items-center">  
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />  
+                            </svg>  
+                            错误  
+                        </div>  
+                    </div>  
+                </div>  
+                
+                <div x-show="question.isAnswered" class="mt-4">  
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4">  
+                        <div class="font-medium">正确答案：<span x-text="question.answer"></span></div>  
+                        <div class="mt-2" x-html="marked.parse(question.explanation)"></div>  
+                    </div>  
+                </div>  
+            </div>  
+        </template>  
+    </div>  
+</div>  
+
+<!-- 指针题目 -->  
+<div class="mt-10">  
+    <h2 class="text-2xl font-bold mb-6 pb-2 border-b-2 border-blue-500">6-位操作、位域</h2>  
+    <div class="space-y-8">  
+        <template x-for="(question, index) in questions.slice(50, 60)" :key="index + 50">  
+            <div :id="'question-' + (index + 50)" class="bg-white rounded-lg shadow-md p-6 question-section">  
+                <h3 class="text-lg font-semibold mb-3" x-text="'0' + (index + 1) + '.'"></h3>  
+                <div class="mb-4" x-html="marked.parse(question.content)"></div>  
+                
+                <div class="space-y-2 mb-4">  
+                    <template x-for="(option, optIndex) in ['A', 'B', 'C', 'D']" :key="optIndex">  
+                        <div   
+                            class="flex items-start p-3 rounded-md cursor-pointer hover:bg-gray-100 transition-colors"  
+                            :class="isOptionSelected(index + 50, option) ? 'selected-option' : ''"  
+                            @click="toggleOption(index + 50, option)">  
+                            <div class="w-8 h-8 flex-shrink-0 rounded-full bg-gray-200 flex items-center justify-center mr-3">  
+                                <span x-text="option"></span>  
+                            </div>  
+                            <div x-text="question.options[optIndex]"></div>  
+                        </div>  
+                    </template>  
+                </div>  
+                
+                <div class="flex items-center justify-between">  
+                    <div>  
+                        <button   
+                            @click="checkAnswer(index + 50)"  
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">  
+                            检查答案  
+                        </button>  
+                    </div>  
+                    
+                    <div x-show="question.isAnswered" class="flex items-center" x-transition>  
+                        <div x-show="question.isCorrect" class="text-green-600 flex items-center">  
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />  
+                            </svg>  
+                            正确  
+                        </div>  
+                        <div x-show="!question.isCorrect" class="text-red-600 flex items-center">  
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />  
+                            </svg>  
+                            错误  
+                        </div>  
+                    </div>  
+                </div>  
+                
+                <div x-show="question.isAnswered" class="mt-4">  
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4">  
+                        <div class="font-medium">正确答案：<span x-text="question.answer"></span></div>  
+                        <div class="mt-2" x-html="marked.parse(question.explanation)"></div>  
+                    </div>  
+                </div>  
+            </div>  
+        </template>  
+    </div>  
+</div>  
+
+<!-- 预处理题目 -->  
+<div class="mt-10">  
+    <h2 class="text-2xl font-bold mb-6 pb-2 border-b-2 border-blue-500">7-并发编程</h2>  
+    <div class="space-y-8">  
+        <template x-for="(question, index) in questions.slice(60, 70)" :key="index + 60">  
+            <div :id="'question-' + (index + 60)" class="bg-white rounded-lg shadow-md p-6 question-section">  
+                <h3 class="text-lg font-semibold mb-3" x-text="'0' + (index + 1) + '.'"></h3>  
+                <div class="mb-4" x-html="marked.parse(question.content)"></div>  
+                
+                <div class="space-y-2 mb-4">  
+                    <template x-for="(option, optIndex) in ['A', 'B', 'C', 'D']" :key="optIndex">  
+                        <div   
+                            class="flex items-start p-3 rounded-md cursor-pointer hover:bg-gray-100 transition-colors"  
+                            :class="isOptionSelected(index + 60, option) ? 'selected-option' : ''"  
+                            @click="toggleOption(index + 60, option)">  
+                            <div class="w-8 h-8 flex-shrink-0 rounded-full bg-gray-200 flex items-center justify-center mr-3">  
+                                <span x-text="option"></span>  
+                            </div>  
+                            <div x-text="question.options[optIndex]"></div>  
+                        </div>  
+                    </template>  
+                </div>  
+                
+                <div class="flex items-center justify-between">  
+                    <div>  
+                        <button   
+                            @click="checkAnswer(index + 60)"  
+                            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">  
+                            检查答案  
+                        </button>  
+                    </div>  
+                    
+                    <div x-show="question.isAnswered" class="flex items-center" x-transition>  
+                        <div x-show="question.isCorrect" class="text-green-600 flex items-center">  
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />  
+                            </svg>  
+                            正确  
+                        </div>  
+                        <div x-show="!question.isCorrect" class="text-red-600 flex items-center">  
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">  
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />  
+                            </svg>  
+                            错误  
+                        </div>  
+                    </div>  
+                </div>  
+                
+                <div x-show="question.isAnswered" class="mt-4">  
+                    <div class="bg-blue-50 border-l-4 border-blue-500 p-4">  
+                        <div class="font-medium">正确答案：<span x-text="question.answer"></span></div>  
+                        <div class="mt-2" x-html="marked.parse(question.explanation)"></div>  
+                    </div>  
+                </div>  
+            </div>  
+        </template>  
+    </div>  
+</div>  
+
+            <!-- 其他题目类别内容省略，结构同上 -->  
+        </div>  
+    </div>  
+
+    <script>  
+        function quizApp() {  
+            return {   
+                currentCategory: '基础语法',  
+                questions: [  
+			{  
+  "content": "分析以下结构体定义代码，哪些说法是正确的？\n```c\nstruct Point {\n    int x;\n    int y;\n};\nstruct Point p1 = {1, 2};\n```",  
+  "options": [  
+    "定义了一个名为Point的结构体类型",  
+    "p1是结构体变量",  
+    "成员x和y默认初始化为0",  
+    "结构体定义必须以分号结尾"  
+  ],  
+  "answer": "ABD",  
+  "explanation": "A正确：定义了名为Point的结构体类型\nB正确：p1是使用该结构体类型定义的变量\nC错误：结构体成员没有默认初始化，必须显式赋值\nD正确：结构体定义必须以分号结尾",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下结构体成员访问代码存在什么问题？\n```c\nstruct Student {\n    char name[20];\n    int age;\n};\nstruct Student s;\ns.name = \"Alice\";\n```",  
+  "options": [  
+    "数组不能直接赋值",  
+    "应该使用strcpy函数",  
+    "成员访问语法错误",  
+    "结构体未初始化"  
+  ],  
+  "answer": "AB",  
+  "explanation": "A正确：C语言中数组名是常量，不能直接赋值\nB正确：应该使用strcpy(s.name, \"Alice\")函数复制字符串\nC错误：成员访问语法s.name是正确的\nD错误：结构体未初始化不是问题，只是成员值未定义",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下结构体指针访问代码，哪些说法是正确的？\n```c\nstruct Point {\n    int x;\n    int y;\n};\nstruct Point p = {3, 4};\nstruct Point *ptr = &p;\n```",  
+  "options": [  
+    "ptr->x等价于(*ptr).x",  
+    "ptr.x是错误语法",  
+    "ptr存储的是p的地址",  
+    "sizeof(ptr)等于sizeof(struct Point)"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：ptr->x和(*ptr).x是等价的指针成员访问方式\nB正确：ptr是指针，不能用点运算符直接访问成员\nC正确：ptr存储的是结构体变量p的地址\nD错误：sizeof(ptr)是指针的大小，而非结构体的大小",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下结构体内存对齐代码存在什么问题？\n```c\n#pragma pack(1)\nstruct Data {\n    char c;\n    int i;\n};\n#pragma pack()\n```",  
+  "options": [  
+    "结构体大小为5字节",  
+    "可能影响访问效率",  
+    "对齐方式设置错误",  
+    "应该使用默认对齐"  
+  ],  
+  "answer": "AB",  
+  "explanation": "A正确：pack(1)禁用对齐，结构体大小为1+4=5字节\nB正确：取消内存对齐可能影响访问效率，尤其在某些架构上\nC错误：对齐设置语法正确\nD错误：是否使用默认对齐取决于具体需求，节省空间或提高效率",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下位字段结构体代码，哪些说法是正确的？\n```c\nstruct Status {\n    unsigned int is_ready:1;\n    unsigned int is_error:1;\n    unsigned int code:4;\n};\n```",  
+  "options": [  
+    "位字段可以节省内存",  
+    "is_ready只占1位",  
+    "code字段取值范围0-15",  
+    "位字段顺序影响内存布局"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：位字段可以精确控制位数，节省内存\nB正确：is_ready只占用1位\nC正确：4位的无符号整数范围是0-15(2^4-1)\nD正确：位字段的声明顺序会影响内存布局",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下结构体大小计算代码存在什么问题？\n```c\nstruct Example {\n    char a;\n    int b;\n    char c;\n};\nsize_t s = sizeof(struct Example);\n```",  
+  "options": [  
+    "大小可能为12字节(假设int为4字节)",  
+    "存在内存对齐填充",  
+    "成员顺序影响结构体大小",  
+    "应该使用#pragma pack(1)"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：由于对齐，大小可能为12字节(1字节+3字节填充+4字节+1字节+3字节填充)\nB正确：为满足对齐要求，编译器会插入填充字节\nC正确：改变成员顺序可以减少填充，影响结构体大小\nD错误：不一定要取消对齐，这取决于需求",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下自引用结构体代码，哪些说法是正确的？\n```c\nstruct Node {\n    int data;\n    struct Node* next;\n};\n```",  
+  "options": [  
+    "可以用于实现链表",  
+    "结构体内部不能包含自身实例",  
+    "next是指向同类型结构体的指针",  
+    "sizeof(struct Node)包含指针大小"  
+  ],  
+  "answer": "ACD",  
+  "explanation": "A正确：这是链表节点的典型定义\nB错误：结构体内不能包含自身实例，但可以包含指向自身类型的指针\nC正确：next是指向Node结构体的指针\nD正确：sizeof计算包括所有成员大小，包括指针",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下typedef简化代码存在什么问题？\n```c\ntypedef struct {\n    int x;\n    int y;\n} Point;\nPoint p1;\nstruct Point p2;\n```",  
+  "options": [  
+    "p1声明正确",  
+    "p2声明错误",  
+    "匿名结构体无法引用",  
+    "应该使用struct关键字"  
+  ],  
+  "answer": "AB",  
+  "explanation": "A正确：p1声明方式正确，使用了typedef定义的别名\nB正确：p2声明错误，因为使用了匿名结构体，struct Point未定义\nC错误：匿名结构体可以通过typedef名引用\nD错误：使用typedef后不需要struct关键字",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下结构体初始化代码，哪些说法是正确的？\n```c\nstruct Person {\n    char name[20];\n    int age;\n};\nstruct Person p = {.age = 25, .name = \"John\"};\n```",  
+  "options": [  
+    "使用指定初始化器",  
+    "初始化顺序可以改变",  
+    "字符串赋值方式错误",  
+    "应该先声明后初始化"  
+  ],  
+  "answer": "AB",  
+  "explanation": "A正确：使用了C99引入的指定初始化器语法\nB正确：使用指定初始化器可以改变初始化成员的顺序\nC错误：初始化时字符数组可以直接用字符串字面量\nD错误：可以在声明时直接初始化",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下结构体嵌套代码存在什么问题？\n```c\nstruct Date {\n    int year;\n    int month;\n    int day;\n};\nstruct Person {\n    char name[20];\n    struct Date birthday;\n};\nstruct Person p = {\"Alice\", {1990, 5, 15}};\n```",  
+  "options": [  
+    "嵌套初始化语法错误",  
+    "内存布局可能不连续",  
+    "访问birthday.year需要两次成员访问",  
+    "应该使用指针代替嵌套"  
+  ],  
+  "answer": "C",  
+  "explanation": "A错误：嵌套初始化语法正确\nB错误：嵌套结构体的内存布局是连续的\nC正确：访问嵌套成员需要两次点运算符，如p.birthday.year\nD错误：使用嵌套结构体还是指针取决于设计需求",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},
+{  
+  "content": "分析以下联合体定义代码，哪些说法是正确的？\n```c\nunion Data {\n    int i;\n    float f;\n};\n```",  
+  "options": [  
+    "联合体所有成员共享同一内存空间",  
+    "联合体大小等于最大成员的大小",  
+    "可以同时使用i和f成员",  
+    "联合体可以用于类型转换"  
+  ],  
+  "answer": "ABD",  
+  "explanation": "A正确：联合体所有成员共享同一块内存空间\nB正确：联合体大小等于其最大成员的大小\nC错误：不能同时使用多个成员，使用一个会覆盖另一个\nD正确：联合体常用于不同类型间的位模式转换",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下联合体初始化代码存在什么问题？\n```c\nunion Value {\n    int num;\n    double d;\n};\nunion Value v = {3.14};\n```",  
+  "options": [  
+    "初始化值与第一个成员类型不匹配",  
+    "应该指定成员名称初始化",  
+    "联合体不能直接初始化",  
+    "会导致数据截断"  
+  ],  
+  "answer": "AD",  
+  "explanation": "A正确：联合体默认初始化第一个成员，类型不匹配\nB错误：C99之前不能指定成员初始化，C99后可以\nC错误：联合体可以直接初始化\nD正确：double类型赋值给int会导致数据截断",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下联合体类型双关代码，哪些说法是正确的？\n```c\nunion Converter {\n    unsigned int bits;\n    float value;\n};\nunion Converter c;\nc.value = 3.5;\nunsigned int b = c.bits;\n```",  
+  "options": [  
+    "实现了float到unsigned int的位模式转换",  
+    "这种用法是未定义行为",  
+    "可以用于分析浮点数的二进制表示",  
+    "在不同平台上结果可能不同"  
+  ],  
+  "answer": "ACD",  
+  "explanation": "A正确：实现了浮点数到整数的位模式转换\nB错误：这种用法不是未定义行为，但可能不可移植\nC正确：可以用于查看浮点数的二进制表示\nD正确：不同平台浮点表示可能不同，结果也会不同",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下联合体大小计算代码存在什么问题？\n```c\nunion Example {\n    char c[10];\n    int i;\n};\nsize_t s = sizeof(union Example);\n```",  
+  "options": [  
+    "联合体大小为10字节",  
+    "可能存在内存对齐填充",  
+    "应该使用结构体代替",  
+    "计算结果取决于最大成员"  
+  ],  
+  "answer": "BD",  
+  "explanation": "A错误：大小取决于对齐和最大成员\nB正确：联合体也受内存对齐影响\nC错误：使用联合体还是结构体取决于需求\nD正确：联合体大小取决于最大成员(考虑对齐)",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下联合体在协议解析中的应用代码，哪些说法是正确的？\n```c\nunion Packet {\n    struct {\n        unsigned char type;\n        unsigned char length;\n        unsigned char data[8];\n    } fields;\n    unsigned char raw[10];\n};\n```",  
+  "options": [  
+    "可以同时以结构化和原始方式访问数据",  
+    "raw数组大小必须等于结构体总大小",  
+    "适用于网络协议解析",  
+    "可以节省内存空间"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：提供了结构化和原始字节两种访问方式\nB正确：raw大小必须至少等于结构体总大小\nC正确：这种设计常用于网络协议解析\nD错误：这里联合体不节省空间，只提供多种访问方式",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下联合体成员访问代码存在什么问题？\n```c\nunion Data {\n    int x;\n    float y;\n};\nunion Data d;\nd.x = 10;\nprintf(\"%f\", d.y);\n```",  
+  "options": [  
+    "同时访问不同成员是未定义行为",  
+    "输出结果不可预测",  
+    "应该先初始化y成员",  
+    "这种用法有实际应用价值"  
+  ],  
+  "answer": "ABD",  
+  "explanation": "A正确：写一个成员再读另一个成员是未定义行为\nB正确：输出结果无法预测，取决于int和float的内存表示\nC错误：初始化y也不能解决这个问题\nD正确：虽有风险但在类型转换等场景有应用价值",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下联合体在硬件寄存器访问中的应用代码，哪些说法是正确的？\n```c\nunion Register {\n    struct {\n        unsigned int enable:1;\n        unsigned int mode:3;\n        unsigned int value:8;\n    } bits;\n    unsigned int word;\n};\n```",  
+  "options": [  
+    "可以位级访问寄存器",  
+    "位字段顺序影响内存布局",  
+    "适用于嵌入式系统开发",  
+    "word和bits共享同一内存"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：提供了通过位字段进行位级访问\nB正确：位字段顺序影响位在整数中的位置\nC正确：这种设计常用于嵌入式系统寄存器操作\nD正确：联合体特性使word和bits共享内存",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下联合体与结构体嵌套代码存在什么问题？\n```c\nstruct Header {\n    int type;\n    union {\n        int intValue;\n        float floatValue;\n    } data;\n};\n```",  
+  "options": [  
+    "嵌套语法错误",  
+    "联合体未命名",  
+    "可以更节省内存",  
+    "访问方式复杂"  
+  ],  
+  "answer": "B",  
+  "explanation": "A错误：嵌套语法正确\nB正确：匿名联合体没有名称，访问需要data.intValue而非直接intValue\nC错误：这种设计并不特别节省内存\nD错误：访问方式标准且简洁",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下联合体数组代码，哪些说法是正确的？\n```c\nunion Variant {\n    int i;\n    float f;\n    char *s;\n};\nunion Variant arr[10];\n```",  
+  "options": [  
+    "数组每个元素可以存储不同类型数据",  
+    "需要额外字段记录当前使用的成员",  
+    "实现了变体类型功能",  
+    "比结构体数组更节省空间"  
+  ],  
+  "answer": "ACD",  
+  "explanation": "A正确：每个元素可以独立存储不同类型\nB错误：C语言中联合体不会自动记录活动成员\nC正确：这种模式实现了变体(variant)类型功能\nD正确：比使用含所有成员的结构体更节省空间",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下联合体与指针转换代码存在什么问题？\n```c\nunion PtrUnion {\n    void *ptr;\n    unsigned long addr;\n};\nunion PtrUnion u;\nu.ptr = malloc(100);\nunsigned long address = u.addr;\n```",  
+  "options": [  
+    "指针到整型的转换不可移植",  
+    "应该使用uintptr_t代替unsigned long",  
+    "联合体使用方式正确",  
+    "在64位系统可能丢失信息"  
+  ],  
+  "answer": "ABD",  
+  "explanation": "A正确：指针到整型转换不可移植\nB正确：应使用uintptr_t保证足够大小\nC错误：这种使用方式有移植性风险\nD正确：如果指针大于unsigned long会丢失信息",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下枚举定义代码，哪些说法是正确的？\n```c\nenum Color {RED, GREEN, BLUE};\n```",  
+  "options": [  
+    "RED的值为0，GREEN为1，BLUE为2",  
+    "枚举常量默认从0开始递增",  
+    "枚举类型在C语言中是强类型",  
+    "可以修改枚举常量的值"  
+  ],  
+  "answer": "AB",  
+  "explanation": "A正确：默认枚举值从0开始递增\nB正确：未指定值时，枚举常量从0开始递增\nC错误：C语言中枚举本质是整型，不是强类型\nD错误：枚举常量是只读的，不能修改",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下枚举使用代码存在什么问题？\n```c\nenum Color {RED, GREEN, BLUE};\nint color = GREEN;\ncolor = 5;\n```",  
+  "options": [  
+    "将枚举值赋给int变量是合法的",  
+    "将整数值赋给枚举变量是危险的",  
+    "应该使用enum Color类型变量",  
+    "会导致编译错误"  
+  ],  
+  "answer": "AC",  
+  "explanation": "A正确：枚举常量可以赋值给整型变量\nB错误：color是int类型，不是枚举变量\nC正确：最好使用enum Color color声明\nD错误：代码不会导致编译错误",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下枚举显式赋值代码，哪些说法是正确的？\n```c\nenum State {\n    IDLE = 10,\n    RUNNING = 20,\n    STOPPED\n};\n```",  
+  "options": [  
+    "STOPPED的值自动为21",  
+    "可以显式指定枚举常量的值",  
+    "枚举值可以不连续",  
+    "显式赋值后不能再用默认值"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：未指定值的枚举常量取前一个值加1\nB正确：可以显式指定枚举常量的具体值\nC正确：枚举值可以不连续，如10,20,21\nD错误：显式赋值后仍可以使用默认递增值",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下枚举类型转换代码存在什么问题？\n```c\nenum Weekday {MON, TUE, WED};\nenum Weekday day = (enum Weekday)5;\n```",  
+  "options": [  
+    "强制类型转换是合法的",  
+    "5不是有效的枚举值",  
+    "运行时行为未定义",  
+    "应该避免这种转换"  
+  ],  
+  "answer": "ABD",  
+  "explanation": "A正确：在C中可以将整数强制转换为枚举类型\nB正确：5超出了枚举定义的有效值范围\nC错误：行为是定义的，但值可能无意义\nD正确：应避免使用未定义的枚举值",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下枚举作用域代码，哪些说法是正确的？\n```c\nenum {SIZE = 100};\nvoid func() {\n    enum {SIZE = 200};\n    printf(\"%d\", SIZE);\n}\n```",  
+  "options": [  
+    "函数内SIZE隐藏了外部SIZE",  
+    "匿名枚举是合法的",  
+    "应该避免同名枚举",  
+    "输出结果为200"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：内部作用域的SIZE会隐藏外部的SIZE\nB正确：匿名枚举在C中是合法的\nC正确：使用相同名称会导致混淆，应该避免\nD正确：函数内会输出200",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下枚举比较代码存在什么问题？\n```c\nenum Color1 {RED, GREEN, BLUE};\nenum Color2 {CYAN, MAGENTA, YELLOW};\nif (RED == CYAN) {...}\n```",  
+  "options": [  
+    "不同枚举类型比较是合法的",  
+    "编译器会给出警告",  
+    "逻辑上不应该比较不同枚举",  
+    "应该使用显式类型转换"  
+  ],  
+  "answer": "ACD",  
+  "explanation": "A正确：C语言允许不同枚举类型之间比较\nB错误：大多数编译器不会对此发出警告\nC正确：逻辑上比较不同枚举类型没有意义\nD正确：如果必须比较，应使用显式转换表明意图",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下枚举与switch语句代码，哪些说法是正确的？\n```c\nenum Status {OK, ERROR};\nenum Status s = OK;\nswitch(s) {\n    case OK: ... break;\n    case ERROR: ... break;\n}\n```",  
+  "options": [  
+    "switch适合处理枚举类型",  
+    "应该包含default分支",  
+    "枚举提高了代码可读性",  
+    "case值必须是枚举常量"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：switch非常适合处理枚举类型\nB正确：即使已覆盖所有枚举值，包含default也是好习惯\nC正确：枚举提高了代码可读性\nD错误：case值可以是任何常量表达式，不必是枚举常量",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下枚举与整型混用代码存在什么问题？\n```c\nenum Level {LOW=1, MEDIUM, HIGH};\nint setting = MEDIUM;\nif (setting == 2) {...}\n```",  
+  "options": [  
+    "依赖枚举值的具体数值",  
+    "破坏了枚举的类型安全",  
+    "应该使用枚举变量比较",  
+    "语法完全正确"  
+  ],  
+  "answer": "ABD",  
+  "explanation": "A正确：代码依赖MEDIUM的具体值为2\nB正确：直接使用数值而不是枚举常量破坏了类型安全\nC错误：使用枚举变量会更好，但不是必须的\nD正确：语法上完全正确",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下枚举大小计算代码，哪些说法是正确的？\n```c\nenum Flag {FALSE, TRUE};\nsize_t s = sizeof(enum Flag);\n```",  
+  "options": [  
+    "枚举类型大小由实现决定",  
+    "通常与int大小相同",  
+    "可以存储所有枚举值的最小整数类型",  
+    "总是4字节"  
+  ],  
+  "answer": "AB",  
+  "explanation": "A正确：枚举类型大小取决于编译器实现\nB正确：大多数实现中枚举大小与int相同\nC错误：C语言标准不要求使用最小整数类型\nD错误：不同平台int大小可能不同，不总是4字节",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下枚举数组代码存在什么问题？\n```c\nenum Direction {NORTH, SOUTH, EAST, WEST};\nenum Direction dirs[4] = {NORTH, SOUTH, EAST, WEST};\ndirs[1] = 5;\n```",  
+  "options": [  
+    "数组初始化正确",  
+    "给枚举数组赋整数值是危险的",  
+    "应该使用常量限制赋值",  
+    "会导致运行时错误"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：数组初始化方式正确\nB正确：赋值超出枚举范围的值是危险的\nC正确：应该使用枚举常量而非直接使用整数\nD错误：不会导致运行时错误，但可能导致逻辑错误",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+} ,
+{  
+  "content": "分析以下内存区域划分代码，哪些说法是正确的？\n```c\nint global_var; // 全局变量\nstatic int static_var; // 静态变量\nvoid func() {\n    int local_var; // 局部变量\n    static int func_static; // 函数内静态变量\n    char *str = \"literal\"; // 字符串字面量\n    int *ptr = malloc(100); // 动态分配内存\n}\n```",  
+  "options": [  
+    "global_var存储在全局/静态区",  
+    "local_var存储在栈区",  
+    "\"literal\"存储在代码区",  
+    "malloc分配的内存来自堆区"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：全局变量存储在全局/静态存储区\nB正确：局部变量存储在栈区\nC正确：字符串字面量通常存储在只读的代码/数据区\nD正确：malloc分配的内存来自堆区",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下malloc使用代码存在什么问题？\n```c\nint *arr = malloc(10 * sizeof(int));\narr[10] = 100;\n```",  
+  "options": [  
+    "数组越界访问",  
+    "未检查malloc返回值",  
+    "未初始化分配的内存",  
+    "内存泄漏"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：arr[10]越界(索引范围是0-9)\nB正确：未检查malloc是否返回NULL\nC正确：malloc分配的内存未初始化\nD错误：代码片段中没有内存泄漏",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下realloc使用代码，哪些说法是正确的？\n```c\nint *ptr = malloc(5 * sizeof(int));\nptr = realloc(ptr, 10 * sizeof(int));\n```",  
+  "options": [  
+    "原内存内容会被保留",  
+    "如果realloc失败会返回NULL",  
+    "原ptr指针会被自动释放",  
+    "应该使用临时变量接收realloc结果"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：realloc保留原内存内容\nB正确：失败时返回NULL\nC正确：成功时原指针自动释放\nD正确：应使用临时变量，防止失败导致原指针丢失",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下free使用代码存在什么问题？\n```c\nint *p1 = malloc(100);\nint *p2 = p1;\nfree(p1);\nfree(p2);\n```",  
+  "options": [  
+    "p1和p2指向同一内存",  
+    "重复释放同一内存",  
+    "可能导致程序崩溃",  
+    "应该先置NULL再free"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：p1和p2指向同一块内存\nB正确：同一内存被释放两次\nC正确：重复释放会导致未定义行为，可能崩溃\nD错误：置NULL可防止重复释放，但不是必须的",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下memcpy使用代码，哪些说法是正确的？\n```c\nint src[5] = {1,2,3,4,5};\nint dest[5];\nmemcpy(dest, src, 5 * sizeof(int));\n```",  
+  "options": [  
+    "正确复制了数组内容",  
+    "源和目标内存区域不能重叠",  
+    "比逐个元素赋值效率高",  
+    "应该使用memmove更安全"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：正确复制了整个数组\nB正确：memcpy要求源和目标不能重叠\nC正确：memcpy通常比循环赋值更高效\nD错误：这里源和目标不重叠，不需要memmove",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下memset使用代码存在什么问题？\n```c\nint arr[10];\nmemset(arr, 1, sizeof(arr));\n```",  
+  "options": [  
+    "不能用于初始化int数组",  
+    "每个字节被设为1而不是每个int",  
+    "应该使用calloc代替",  
+    "初始化值不符合预期"  
+  ],  
+  "answer": "ABD",  
+  "explanation": "A正确：memset按字节设置，不适合初始化非零int数组\nB正确：设置每个字节为1，而非每个int为1\nC错误：calloc只能初始化为0，这里想设为1\nD正确：结果是每个int被设为0x01010101，而非1",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下内存泄漏代码，哪些说法是正确的？\n```c\nvoid func() {\n    char *str = malloc(100);\n    if(error_condition) {\n        return;\n    }\n    free(str);\n}\n```",  
+  "options": [  
+    "当error_condition为真时泄漏内存",  
+    "应该在return前释放内存",  
+    "可以使用RAII技术避免",  
+    "内存泄漏难以检测"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：出错返回时未释放内存导致泄漏\nB正确：应该确保所有分支都释放内存\nC正确：C++的RAII可避免此类问题\nD正确：内存泄漏通常难以检测，需特殊工具",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下野指针使用代码存在什么问题？\n```c\nint *ptr = malloc(sizeof(int));\n*ptr = 10;\nfree(ptr);\n*ptr = 20;\n```",  
+  "options": [  
+    "访问已释放内存",  
+    "ptr成为野指针",  
+    "行为未定义",  
+    "应该置ptr为NULL"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：释放后继续访问内存\nB正确：free后ptr成为野指针\nC正确：访问已释放内存是未定义行为\nD正确：释放后应置NULL避免误用",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下结构体内存优化代码，哪些说法是正确的？\n```c\nstruct Bad {\n    char c;\n    int i;\n    char c2;\n};\nstruct Good {\n    int i;\n    char c;\n    char c2;\n};\n```",  
+  "options": [  
+    "Good比Bad节省内存",  
+    "Bad有更多padding字节",  
+    "成员顺序影响结构体大小",  
+    "应该使用#pragma pack(1)"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：Good布局更紧凑，节省内存\nB正确：Bad由于对齐需要更多填充\nC正确：成员排列顺序会影响填充和总大小\nD错误：使用pack(1)可能影响访问效率",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下内存越界访问代码存在什么问题？\n```c\nint arr[5] = {0};\nfor(int i=0; i<=5; i++) {\n    arr[i] = i;\n}\n```",  
+  "options": [  
+    "循环条件应为i<5",  
+    "访问了arr[5]越界",  
+    "可能导致相邻内存被破坏",  
+    "栈溢出"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：循环条件应为i<5，不应包含5\nB正确：数组下标范围是0-4，访问arr[5]越界\nC正确：越界访问会修改相邻内存\nD错误：单个数组元素越界不是栈溢出",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+} ,
+{  
+  "content": "分析以下文件打开代码，哪些说法是正确的？\n```c\nFILE *fp = fopen(\"data.txt\", \"wb+\");\n```",  
+  "options": [  
+    "文件以二进制读写模式打开",  
+    "如果文件不存在会创建新文件",  
+    "文件指针初始位置在文件开头",  
+    "写入内容会覆盖原文件内容"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：wb+表示二进制读写模式\nB正确：w模式在文件不存在时创建新文件\nC正确：文件打开后指针在文件开头\nD正确：w模式会清空原有内容",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下fgets使用代码存在什么问题？\n```c\nchar buffer[10];\nfgets(buffer, sizeof(buffer), stdin);\n```",  
+  "options": [  
+    "可能读取不完整的一行",  
+    "缓冲区大小足够安全",  
+    "会保留换行符在缓冲区中",  
+    "应该使用gets_s替代"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：如果一行超过9个字符会读取不完整\nB正确：使用sizeof(buffer)确保不会溢出\nC正确：fgets会保留换行符\nD错误：fgets已经足够安全",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下二进制文件读写代码，哪些说法是正确的？\n```c\nstruct Student {\n    int id;\n    char name[20];\n};\nstruct Student s = {1, \"Alice\"};\nFILE *fp = fopen(\"students.dat\", \"wb\");\nfwrite(&s, sizeof(s), 1, fp);\n```",  
+  "options": [  
+    "结构体数据以二进制形式写入",  
+    "在不同平台间移植可能有问题",  
+    "应该使用文本格式更通用",  
+    "写入的数据包含id和name"  
+  ],  
+  "answer": "ABD",  
+  "explanation": "A正确：以二进制形式写入结构体数据\nB正确：不同平台字节序和对齐可能不同\nC错误：二进制还是文本取决于应用需求\nD正确：完整写入了整个结构体",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下fseek使用代码存在什么问题？\n```c\nFILE *fp = fopen(\"data.txt\", \"r\");\nfseek(fp, 0, SEEK_END);\nlong size = ftell(fp);\n```",  
+  "options": [  
+    "可以正确获取文件大小",  
+    "在文本模式下结果可能不准确",  
+    "应该使用二进制模式",  
+    "需要先检查文件打开是否成功"  
+  ],  
+  "answer": "BCD",  
+  "explanation": "A错误：文本模式下不一定准确\nB正确：文本模式下\\r\\n转换会影响位置计算\nC正确：获取文件大小应使用二进制模式\nD正确：应该检查fp是否为NULL",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下格式化输入代码，哪些说法是正确的？\n```c\nFILE *fp = fopen(\"input.txt\", \"r\");\nint num;\nfloat value;\nfscanf(fp, \"%d,%f\", &num, &value);\n```",  
+  "options": [  
+    "输入文件格式应为\"整数,浮点数\"",  
+    "应该检查fscanf返回值",  
+    "格式字符串应与文件内容匹配",  
+    "逗号会被读取并丢弃"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：格式字符串要求文件内容为整数逗号浮点数\nB正确：应检查返回值确认读取成功\nC正确：格式不匹配会导致读取失败\nD正确：逗号在格式中作为分隔符会被丢弃",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下feof使用代码存在什么问题？\n```c\nwhile(!feof(fp)) {\n    char ch = fgetc(fp);\n    printf(\"%c\", ch);\n}\n```",  
+  "options": [  
+    "会多输出一个字符",  
+    "应该在读取后检查feof",  
+    "正确判断文件结束",  
+    "应该用ferror检查错误"  
+  ],  
+  "answer": "ABD",  
+  "explanation": "A正确：读到EOF时循环继续，多输出最后一个字符\nB正确：应在读取后检查，而非循环前\nC错误：使用方式不正确，会出现问题\nD正确：应同时检查ferror判断是否发生错误",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下文件指针操作代码，哪些说法是正确的？\n```c\nFILE *fp = fopen(\"test.txt\", \"r+\");\nfseek(fp, 10, SEEK_SET);\nfputc('A', fp);\n```",  
+  "options": [  
+    "文件以读写模式打开",  
+    "在第10字节位置写入字符'A'",  
+    "写入后文件指针自动后移",  
+    "应该检查fseek是否成功"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：r+表示读写模式\nB正确：在偏移10字节处写入'A'\nC正确：写入后文件指针位置增加1\nD正确：应检查fseek返回值确保成功",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下文件描述符与文件指针转换代码存在什么问题？\n```c\nint fd = open(\"file.txt\", O_RDONLY);\nFILE *fp = fdopen(fd, \"r\");\nclose(fd);\n```",  
+  "options": [  
+    "转换后不应关闭原始文件描述符",  
+    "应该使用fclose关闭文件指针",  
+    "可能导致文件指针不可用",  
+    "转换方式完全正确"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：fdopen后不应直接close文件描述符\nB正确：应使用fclose关闭FILE指针\nC正确：关闭底层fd会导致fp不可用\nD错误：转换后处理方式有误",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下文件操作错误处理代码，哪些说法是正确的？\n```c\nFILE *fp = fopen(\"data.txt\", \"r\");\nif(!fp) {\n    perror(\"Error opening file\");\n    exit(EXIT_FAILURE);\n}\n```",  
+  "options": [  
+    "正确检查了文件打开失败",  
+    "perror会输出错误信息",  
+    "应该在所有文件操作后检查错误",  
+    "exit终止程序执行"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：检查了fp是否为NULL\nB正确：perror会输出系统错误信息\nC正确：良好实践是检查所有可能的错误\nD正确：出错时exit终止程序",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下文件读写位置代码存在什么问题？\n```c\nFILE *fp = fopen(\"data.txt\", \"r+\");\nfgetc(fp);\nfputs(\"new\", fp);\n```",  
+  "options": [  
+    "读写位置可能不符合预期",  
+    "应该在写入前调整位置",  
+    "混合读写需要明确位置",  
+    "操作顺序完全正确"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：读取后位置改变，写入位置可能不符合预期\nB正确：应使用fseek明确指定写入位置\nC正确：混合读写操作需谨慎处理文件位置\nD错误：缺少位置调整，可能导致问题",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+} ,
+
+{  
+  "content": "分析以下位操作代码，哪些说法是正确的？\n```c\nunsigned int flags = 0;\nflags |= (1 << 3);\n```",  
+  "options": [  
+    "将flags的第3位置1",  
+    "等价于flags = flags | 8",  
+    "1<<3的结果是8",  
+    "会清除其他位的值"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：将第3位(从0开始计数)置为1\nB正确：1<<3等于8，操作等价于flags |= 8\nC正确：左移3位，结果是8(二进制1000)\nD错误：按位或不会清除其他位",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下位掩码使用代码存在什么问题？\n```c\n#define READ_PERM (1 << 0)\n#define WRITE_PERM (1 << 1)\nunsigned int perms = READ_PERM | WRITE_PERM;\nif (perms & READ_PERM) {\n    // 检查读权限\n}\n```",  
+  "options": [  
+    "权限检查方式正确",  
+    "应该使用==而不是&",  
+    "位掩码定义合理",  
+    "应该先清除其他位"  
+  ],  
+  "answer": "AC",  
+  "explanation": "A正确：使用位与操作检查标志位是否设置\nB错误：检查位应使用&而非==\nC正确：位掩码定义方式合理\nD错误：不需要清除其他位，&操作只检查关心的位",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下位域定义代码，哪些说法是正确的？\n```c\nstruct {\n    unsigned int a : 4;\n    unsigned int b : 4;\n} bits;\n```",  
+  "options": [  
+    "a和b各占4位",  
+    "总大小至少1字节",  
+    "位域成员可以有地址",  
+    "可以定义超过32位的位域"  
+  ],  
+  "answer": "AB",  
+  "explanation": "A正确：a和b各占4位\nB正确：总共8位，至少占1字节\nC错误：位域成员不能取地址\nD错误：单个位域成员不能超过基础类型大小",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下位移操作代码存在什么问题？\n```c\nint x = -1;\nx = x >> 1;\n```",  
+  "options": [  
+    "对有符号数右移结果依赖实现",  
+    "应该使用无符号数",  
+    "右移会保留符号位",  
+    "结果是未定义的"  
+  ],  
+  "answer": "AB",  
+  "explanation": "A正确：C标准未规定有符号数右移是算术还是逻辑\nB正确：位操作最好使用无符号数\nC错误：这依赖于实现，不一定会保留\nD错误：行为是由实现定义的，不是未定义",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下位操作应用代码，哪些说法是正确的？\n```c\nunsigned int color = 0xFFAABB;\nunsigned char red = (color >> 16) & 0xFF;\n```",  
+  "options": [  
+    "正确提取了红色分量",  
+    "位移操作可能丢失数据",  
+    "应该使用联合体更高效",  
+    "掩码操作确保只取低8位"  
+  ],  
+  "answer": "AD",  
+  "explanation": "A正确：正确提取了颜色的红色分量(0xFF)\nB错误：右移16位不会丢失所需数据\nC错误：位操作在此情况下足够高效\nD正确：与0xFF操作确保只取低8位",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下位域内存布局代码存在什么问题？\n```c\nstruct {\n    unsigned int a : 1;\n    unsigned int b : 31;\n    unsigned int c : 1;\n} flags;\n```",  
+  "options": [  
+    "内存布局依赖实现",  
+    "c可能从新字节开始",  
+    "总大小可能是8字节",  
+    "应该使用#pragma pack"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：位域内存布局依赖编译器实现\nB正确：c可能跨越int边界，从新字节开始\nC正确：总大小可能是8字节(两个int)\nD错误：不需要特殊对齐指令",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下位运算优先级代码，哪些说法是正确的？\n```c\nunsigned int x = 0xF0 & 0x3F | 0x0A;\n```",  
+  "options": [  
+    "&优先级高于|",  
+    "结果是0x3A",  
+    "应该加括号明确优先级",  
+    "等价于(0xF0 & 0x3F) | 0x0A"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：&运算符优先级高于|\nB正确：计算过程:0xF0&0x3F=0x30, 0x30|0x0A=0x3A\nC正确：使用括号可提高可读性\nD正确：表达式等价于(0xF0 & 0x3F) | 0x0A",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下位域赋值代码存在什么问题？\n```c\nstruct {\n    unsigned int a : 3;\n} num;\nnum.a = 8;\n```",  
+  "options": [  
+    "赋值超出位域范围",  
+    "高位会被截断",  
+    "结果是未定义的",  
+    "应该使用更大位宽"  
+  ],  
+  "answer": "ABD",  
+  "explanation": "A正确：3位最大值为7(111)，8超出范围\nB正确：高位会被截断(8->0)\nC错误：行为是定义的，超出部分会被截断\nD正确：如需存储8，应使用4位或更多",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下位操作优化代码，哪些说法是正确的？\n```c\nif (x % 2 == 0) {\n    // 判断偶数\n}\n```",  
+  "options": [  
+    "可以优化为if(!(x & 1))",  
+    "位操作效率更高",  
+    "两种方式结果相同",  
+    "编译器会自动优化"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：可优化为if(!(x & 1))或if((x & 1) == 0)\nB正确：位操作通常比取模更高效\nC正确：两种方式在判断奇偶性上结果相同\nD错误：不能保证所有编译器都会做此优化",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下位域与普通成员混合代码存在什么问题？\n```c\nstruct {\n    unsigned int a : 4;\n    unsigned int b;\n    unsigned int c : 4;\n} s;\n```",  
+  "options": [  
+    "b可能破坏位域连续布局",  
+    "编译器会插入填充",  
+    "内存布局不可预测",  
+    "应该分开定义"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：普通成员b会破坏位域连续性\nB正确：编译器可能插入填充以对齐b\nC正确：混合布局在不同编译器有不同结果\nD错误：分开定义不是必须的",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+} ,
+{  
+  "content": "分析以下线程创建代码，哪些说法是正确的？\n```c\n#include <pthread.h>\nvoid* thread_func(void* arg) {\n    printf(\"Thread running\\n\");\n    return NULL;\n}\nint main() {\n    pthread_t tid;\n    pthread_create(&tid, NULL, thread_func, NULL);\n}\n```",  
+  "options": [  
+    "主线程可能先于新线程退出",  
+    "缺少pthread_join等待线程结束",  
+    "线程函数必须返回void*",  
+    "缺少互斥锁保护printf"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：主线程可能在子线程完成前退出\nB正确：没有pthread_join等待线程结束\nC正确：pthread线程函数必须返回void*\nD错误：单线程printf不需要互斥锁",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下互斥锁使用代码存在什么问题？\n```c\npthread_mutex_t mutex;\nvoid critical_section() {\n    pthread_mutex_lock(&mutex);\n    // 临界区代码\n    return; // 提前返回\n}\n```",  
+  "options": [  
+    "未初始化mutex",  
+    "提前返回导致未解锁",  
+    "可能造成死锁",  
+    "应该使用自旋锁"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：mutex未初始化(缺少pthread_mutex_init)\nB正确：提前返回导致不会解锁\nC正确：未解锁的mutex会导致死锁\nD错误：选择锁类型取决于具体需求",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下进程通信代码，哪些说法是正确的？\n```c\nint fd[2];\npipe(fd);\nif (fork() == 0) {\n    close(fd[0]); // 子进程关闭读端\n    write(fd[1], \"hello\", 6);\n}\n```",  
+  "options": [  
+    "创建了匿名管道",  
+    "父子进程通过管道通信",  
+    "正确关闭了未使用的管道端",  
+    "应该使用命名管道"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：pipe创建匿名管道\nB正确：父子进程可通过管道通信\nC正确：子进程关闭了不用的读端\nD错误：匿名管道适用于相关进程通信",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下信号量使用代码存在什么问题？\n```c\nsem_t sem;\nsem_init(&sem, 0, 1);\nsem_wait(&sem);\n// 临界区代码\nsem_post(&sem);\nsem_destroy(&sem);\n```",  
+  "options": [  
+    "缺少错误检查",  
+    "信号量初始值应为0",  
+    "未考虑线程间共享",  
+    "销毁前应确保信号量为1"  
+  ],  
+  "answer": "AD",  
+  "explanation": "A正确：没有检查sem_init等函数返回值\nB错误：初始值1适用于互斥场景\nC错误：参数0表示线程间共享\nD正确：应确保无线程在等待后再销毁",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下共享内存代码，哪些说法是正确的？\n```c\nint shm_id = shmget(IPC_PRIVATE, 1024, 0666);\nchar* ptr = shmat(shm_id, NULL, 0);\nstrcpy(ptr, \"shared memory\");\n```",  
+  "options": [  
+    "创建了1024字节共享内存",  
+    "多个进程可附加到该内存",  
+    "缺少同步机制保护访问",  
+    "应该使用mmap替代"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：创建了1024字节的共享内存\nB正确：其他进程可以通过ID访问该内存\nC正确：没有同步机制保护并发访问\nD错误：shmget和mmap各有适用场景",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下原子操作代码存在什么问题？\n```c\nint counter = 0;\nvoid increment() {\n    counter++;\n}\n```",  
+  "options": [  
+    "操作不是原子性的",  
+    "多线程下可能丢失更新",  
+    "应该使用atomic_int",  
+    "需要互斥锁保护"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：counter++不是原子操作\nB正确：多线程环境下会导致竞态条件\nC正确：C11可使用atomic_int类型\nD正确：传统方式需要mutex保护",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下读写锁代码，哪些说法是正确的？\n```c\npthread_rwlock_t rwlock;\nvoid reader() {\n    pthread_rwlock_rdlock(&rwlock);\n    // 读操作\n    pthread_rwlock_unlock(&rwlock);\n}\nvoid writer() {\n    pthread_rwlock_wrlock(&rwlock);\n    // 写操作\n    pthread_rwlock_unlock(&rwlock);\n}\n```",  
+  "options": [  
+    "允许多个读者同时访问",  
+    "写操作具有排他性",  
+    "可能饿死写者",  
+    "应该先初始化rwlock"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：读锁允许多读者同时访问\nB正确：写锁具有排他性\nC正确：实现不当可能导致写者饿死\nD正确：缺少pthread_rwlock_init初始化",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下死锁场景代码存在什么问题？\n```c\npthread_mutex_t mutex1, mutex2;\nvoid* thread1(void* arg) {\n    pthread_mutex_lock(&mutex1);\n    pthread_mutex_lock(&mutex2);\n    // ...\n    pthread_mutex_unlock(&mutex2);\n    pthread_mutex_unlock(&mutex1);\n}\nvoid* thread2(void* arg) {\n    pthread_mutex_lock(&mutex2);\n    pthread_mutex_lock(&mutex1);\n    // ...\n    pthread_mutex_unlock(&mutex1);\n    pthread_mutex_unlock(&mutex2);\n}\n```",  
+  "options": [  
+    "形成了循环等待条件",  
+    "锁获取顺序不一致",  
+    "可能导致死锁",  
+    "应该使用单个互斥锁"  
+  ],  
+  "answer": "ABC",  
+  "explanation": "A正确：两个线程互相等待对方的锁\nB正确：线程1和2获取锁的顺序不同\nC正确：可能导致死锁\nD错误：不一定要用单锁，保持获取顺序一致即可",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "分析以下自旋锁适用场景，哪些说法是正确的？\n```c\nwhile (test_and_set(&lock)) ; // 自旋等待\n// 临界区代码\nlock = 0;\n```",  
+  "options": [  
+    "适合临界区很短的场景",  
+    "浪费CPU周期",  
+    "比互斥锁更高效",  
+    "可能导致优先级反转"  
+  ],  
+  "answer": "ABD",  
+  "explanation": "A正确：适合短临界区\nB正确：等待期间持续消耗CPU\nC错误：不一定比互斥锁高效，取决于场景\nD正确：可能导致优先级反转问题",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+},  
+{  
+  "content": "以下中断处理代码存在什么问题？\n```c\nvoid ISR() {\n    printf(\"Interrupt occurred\\n\");\n    sem_post(&irq_sem);\n}\n```",  
+  "options": [  
+    "ISR中调用了不可重入函数",  
+    "sem_post可能阻塞",  
+    "应该使用中断屏蔽",  
+    "打印语句影响实时性"  
+  ],  
+  "answer": "ABCD",  
+  "explanation": "A正确：printf不是可重入函数，不应在ISR中使用\nB正确：sem_post可能阻塞，不适合ISR\nC正确：应使用适当的中断屏蔽机制\nD正确：打印严重影响ISR执行时间",  
+  "isAnswered": false,  
+  "isCorrect": false,  
+  "selectedOptions": []  
+}  
+                ],  
+                
+                get answeredCount() {  
+                    return this.questions.filter(q => q.isAnswered).length;  
+                },  
+                
+                get correctCount() {  
+                    return this.questions.filter(q => q.isAnswered && q.isCorrect).length;  
+                },  
+                
+                isOptionSelected(index, option) {  
+                    return this.questions[index].selectedOptions &&   
+                           this.questions[index].selectedOptions.includes(option);  
+                },  
+                
+                toggleOption(index, option) {  
+                    if (this.questions[index].isAnswered) {  
+                        return; // 已回答的问题不允许再修改选项  
+                    }  
+                    
+                    // 确保 selectedOptions 已初始化  
+                    if (!this.questions[index].selectedOptions) {  
+                        this.questions[index].selectedOptions = [];  
+                    }  
+                    
+                    const optIndex = this.questions[index].selectedOptions.indexOf(option);  
+                    
+                    // 创建新数组以确保响应式更新  
+                    let newSelectedOptions = [...this.questions[index].selectedOptions];  
+                    
+                    if (optIndex === -1) {  
+                        newSelectedOptions.push(option);  
+                    } else {  
+                        newSelectedOptions.splice(optIndex, 1);  
+                    }  
+                    
+                    // 使用完整替换更新数组  
+                    this.questions[index].selectedOptions = newSelectedOptions;  
+                },  
+                
+                checkAnswer(index) {  
+                    if (!this.questions[index].isAnswered) {  
+                        const selectedOptions = this.questions[index].selectedOptions || [];  
+                        // 排序选项以便比较  
+                        const sortedSelected = [...selectedOptions].sort().join('');  
+                        
+                        this.questions[index].isAnswered = true;  
+                        this.questions[index].isCorrect = (sortedSelected === this.questions[index].answer);  
+                    }  
+                },  
+                
+                scrollToQuestion(index) {  
+                    const el = document.getElementById('question-' + index);  
+                    if (el) {  
+                        el.scrollIntoView({behavior: 'smooth'});  
+                    }  
+                    
+                    // 根据题目编号自动切换到对应的导航页  
+                    if (index < 30) {  
+                        this.currentNavPage = 1;  
+                    } else if (index < 60) {  
+                        this.currentNavPage = 2;  
+                    } else {  
+                        this.currentNavPage = 3;  
+                    }  
+                }  
+            }  
+        }  
+    </script>    
+</body>  
+</html>  

@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux同步原语对比 - 互斥锁</title>
+    <link rel="stylesheet" href="../tailwind.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+        }
+        .content {
+            margin-left: 250px;
+            padding: 20px;
+            width: calc(100% - 250px);
+        }
+        .sidebar-header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #34495e;
+        }
+        .nav-link {
+            display: block;
+            padding: 15px 20px;
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        .nav-link:hover {
+            background-color: #34495e;
+        }
+        .active {
+            background-color: #3498db;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .card-header {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+        }
+        .card-body {
+            padding: 20px;
+        }
+        .note-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre;
+            overflow-x: auto;
+            line-height: 1.5;
+            margin: 15px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="sidebar">
+        <div class="sidebar-header">  
+    <a href="./linux_sync_short.html" class="block">  
+        <h2 class="text-xl font-bold hover:text-blue-600 transition-colors">Linux同步原语简要版</h2>  
+    </a>  
+</div>
+        <nav>
+            <a href="linux_sync.html" class="nav-link">首页</a>
+            <a href="mutex.html" class="nav-link active">互斥锁 (Mutex)</a>
+            <a href="rwlock.html" class="nav-link">读写锁 (RWLock)</a>
+            <a href="spinlock.html" class="nav-link">自旋锁 (Spinlock)</a>
+            <a href="atomic.html" class="nav-link">原子操作 (Atomic)</a>
+            <a href="semaphore.html" class="nav-link">信号量 (Semaphore)</a>
+            <a href="rcu.html" class="nav-link">RCU</a>
+            <a href="seqlock.html" class="nav-link">顺序锁 (Seqlock)</a>
+            <a href="barrier.html" class="nav-link">内存屏障 (Barrier)</a>
+            <a href="rwbarrier.html" class="nav-link">读写屏障 (RW Barrier)</a>
+        </nav>
+    </div>
+
+    <div class="content">
+        <h1 class="text-3xl font-bold mb-6">互斥锁 (Mutex)</h1>
+        
+        <div class="card">
+            <div class="card-header">互斥锁概述</div>
+            <div class="card-body">
+                <p class="mb-4">互斥锁(Mutex)是最基本的同步原语，用于保证同一时刻只有一个线程可以访问共享资源。它提供了互斥访问的能力，是多线程/多进程编程中最常用的同步工具。</p>
+                
+                <p class="mb-4">互斥锁的基本操作包括初始化、加锁、解锁和销毁。当一个线程获取锁时，其他尝试获取同一把锁的线程将被阻塞，直到持有锁的线程释放它。</p>
+                
+                <div class="note-box">
+                    <h3 class="font-bold text-lg mb-2">总结</h3>
+                    <p>互斥锁设计的精髓在于"谁加锁，谁解锁"的责任明确性。Linux内核实现的mutex锁与用户态pthread_mutex的主要区别在于内核态的锁更加轻量且具有上下文感知能力。互斥锁本质上是一种"睡眠式"锁，持有者会让其他竞争者进入睡眠状态而非忙等，这是它区别于自旋锁的关键特性。精通互斥锁使用的关键是理解其上下文限制：内核态mutex不能在中断上下文使用，而用户态的pthread_mutex则需警惕可重入性和死锁问题。锁的选择永远是性能与安全的博弈，盲目追求轻量级往往是万恶之源。</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">用户态与内核态互斥锁对比</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-center">用户态 (Pthread Mutex)</h3>
+                        <table>
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;pthread.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>pthread_mutex_t</code></td>
+                            </tr>
+                            <tr>
+                                <th>静态初始化</th>
+                                <td><code>pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;</code></td>
+                            </tr>
+                            <tr>
+                                <th>动态初始化</th>
+                                <td><code>int pthread_mutex_init(pthread_mutex_t *mutex, const pthread_mutexattr_t *attr);</code></td>
+                            </tr>
+                            <tr>
+                                <th>加锁</th>
+                                <td><code>int pthread_mutex_lock(pthread_mutex_t *mutex);</code></td>
+                            </tr>
+                            <tr>
+                                <th>尝试加锁</th>
+                                <td><code>int pthread_mutex_trylock(pthread_mutex_t *mutex);</code></td>
+                            </tr>
+                            <tr>
+                                <th>超时加锁</th>
+                                <td><code>int pthread_mutex_timedlock(pthread_mutex_t *mutex, const struct timespec *abstime);</code></td>
+                            </tr>
+                            <tr>
+                                <th>解锁</th>
+                                <td><code>int pthread_mutex_unlock(pthread_mutex_t *mutex);</code></td>
+                            </tr>
+                            <tr>
+                                <th>销毁</th>
+                                <td><code>int pthread_mutex_destroy(pthread_mutex_t *mutex);</code></td>
+                            </tr>
+                            <tr>
+                                <th>属性初始化</th>
+                                <td><code>int pthread_mutexattr_init(pthread_mutexattr_t *attr);</code></td>
+                            </tr>
+                            <tr>
+                                <th>属性销毁</th>
+                                <td><code>int pthread_mutexattr_destroy(pthread_mutexattr_t *attr);</code></td>
+                            </tr>
+                            <tr>
+                                <th>设置类型</th>
+                                <td><code>int pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type);</code></td>
+                            </tr>
+                            <tr>
+                                <th>获取类型</th>
+                                <td><code>int pthread_mutexattr_gettype(const pthread_mutexattr_t *attr, int *type);</code></td>
+                            </tr>
+                            <tr>
+                                <th>互斥锁类型</th>
+                                <td>
+                                    <code>PTHREAD_MUTEX_NORMAL</code> - 默认类型<br>
+                                    <code>PTHREAD_MUTEX_ERRORCHECK</code> - 错误检查<br>
+                                    <code>PTHREAD_MUTEX_RECURSIVE</code> - 可重入<br>
+                                    <code>PTHREAD_MUTEX_DEFAULT</code> - 与NORMAL相同
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-center">内核态 (Kernel Mutex)</h3>
+                        <table>
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;linux/mutex.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>struct mutex</code></td>
+                            </tr>
+                            <tr>
+                                <th>静态初始化</th>
+                                <td><code>DEFINE_MUTEX(name);</code></td>
+                            </tr>
+                            <tr>
+                                <th>动态初始化</th>
+                                <td><code>void mutex_init(struct mutex *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>加锁</th>
+                                <td><code>void mutex_lock(struct mutex *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>尝试加锁</th>
+                                <td><code>int mutex_trylock(struct mutex *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>可中断加锁</th>
+                                <td><code>int mutex_lock_interruptible(struct mutex *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>可杀死加锁</th>
+                                <td><code>int mutex_lock_killable(struct mutex *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>解锁</th>
+                                <td><code>void mutex_unlock(struct mutex *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>是否锁定</th>
+                                <td><code>int mutex_is_locked(struct mutex *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>销毁</th>
+                                <td>无显式销毁函数</td>
+                            </tr>
+                            <tr>
+                                <th>额外功能</th>
+                                <td>
+                                    <code>int mutex_lock_interruptible_nested(struct mutex *lock, unsigned int subclass);</code><br>
+                                    <code>int mutex_lock_killable_nested(struct mutex *lock, unsigned int subclass);</code><br>
+                                    <code>void mutex_lock_nested(struct mutex *lock, unsigned int subclass);</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>调试功能</th>
+                                <td>
+                                    <code>void mutex_destroy(struct mutex *lock);</code> - 仅在DEBUG配置时使用
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">使用场景</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">用户态 (Pthread Mutex)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>保护临界区域的共享资源访问</li>
+                            <li>多线程应用中的数据同步</li>
+                            <li>可能会长时间持有锁的场景</li>
+                            <li>需要线程阻塞而非忙等的场景</li>
+                            <li>通过属性可配置为递归锁，适用于递归调用场景</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">内核态 (Kernel Mutex)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>保护内核中的临界区域</li>
+                            <li>需要线程睡眠而非自旋的锁定机制</li>
+                            <li>可能长时间持有的锁（相对于自旋锁）</li>
+                            <li>不在中断上下文中使用</li>
+                            <li>需要区分可中断和不可中断等待的场景</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">注意事项</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">用户态 (Pthread Mutex)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>加锁和解锁必须由同一线程执行，否则行为未定义（除非是健壮类型的互斥锁）</li>
+                            <li>不要对未初始化的互斥锁进行操作</li>
+                            <li>使用<code>PTHREAD_MUTEX_RECURSIVE</code>类型可以允许同一线程多次获取锁</li>
+                            <li>销毁正在使用的互斥锁会导致未定义行为</li>
+                            <li>返回值非0时表示错误，需要检查错误码</li>
+                            <li>互斥锁是线程私有的，不能在进程间共享（除非使用共享内存并配置相应属性）</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">内核态 (Kernel Mutex)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>不能在中断处理程序、软中断或硬中断上下文中使用</li>
+                            <li>持有锁时不能调用可能导致当前线程睡眠的函数</li>
+                            <li>释放未被锁定的mutex或由其他线程锁定的mutex会导致内核警告或崩溃</li>
+                            <li>不支持递归锁定（同一线程不能多次获取同一把锁）</li>
+                            <li><code>mutex_is_locked()</code>只用于调试，不应该在正常代码逻辑中使用</li>
+                            <li>嵌套锁定API (<code>mutex_lock_nested</code>等) 用于死锁检测，不改变锁的行为</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">使用示例</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">用户态 (Pthread Mutex)</h3>
+                        <div class="code-block">
+#include &lt;pthread.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+int shared_counter = 0;
+
+void* increment_counter(void* arg) {
+    for (int i = 0; i < 1000000; i++) {
+        pthread_mutex_lock(&mutex);
+        shared_counter++;
+        pthread_mutex_unlock(&mutex);
+    }
+    return NULL;
+}
+
+int main() {
+    pthread_t thread1, thread2;
+    
+    pthread_create(&thread1, NULL, increment_counter, NULL);
+    pthread_create(&thread2, NULL, increment_counter, NULL);
+    
+    pthread_join(thread1, NULL);
+    pthread_join(thread2, NULL);
+    
+    printf("Counter value: %d\n", shared_counter);
+    
+    pthread_mutex_destroy(&mutex);
+    return 0;
+}
+</div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">内核态 (Kernel Mutex)</h3>
+                        <div class="code-block">
+#include &lt;linux/module.h&gt;
+#include &lt;linux/kernel.h&gt;
+#include &lt;linux/mutex.h&gt;
+#include &lt;linux/kthread.h&gt;
+
+static DEFINE_MUTEX(my_mutex);
+static int shared_counter = 0;
+static struct task_struct *thread1, *thread2;
+
+static int increment_counter(void *data)
+{
+    int i;
+    for (i = 0; i < 1000000 && !kthread_should_stop(); i++) {
+        mutex_lock(&my_mutex);
+        shared_counter++;
+        mutex_unlock(&my_mutex);
+    }
+    return 0;
+}
+
+static int __init mutex_example_init(void)
+{
+    thread1 = kthread_run(increment_counter, NULL, "mutex_thread1");
+    thread2 = kthread_run(increment_counter, NULL, "mutex_thread2");
+    return 0;
+}
+
+static void __exit mutex_example_exit(void)
+{
+    kthread_stop(thread1);
+    kthread_stop(thread2);
+    printk(KERN_INFO "Counter value: %d\n", shared_counter);
+}
+
+module_init(mutex_example_init);
+module_exit(mutex_example_exit);
+MODULE_LICENSE("GPL");
+</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="mt-8 text-center text-gray-500 text-sm">
+            <p>© 2025 Linux同步原语对比 - 本网站仅供学习参考</p>
+        </footer>
+    </div>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>

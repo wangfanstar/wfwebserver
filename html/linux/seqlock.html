@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux同步原语对比 - 顺序锁 (Seqlock)</title>
+    <link rel="stylesheet" href="../tailwind.min.css">  
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+        }
+        .content {
+            margin-left: 250px;
+            padding: 20px;
+            width: calc(100% - 250px);
+        }
+        .sidebar-header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #34495e;
+        }
+        .nav-link {
+            display: block;
+            padding: 15px 20px;
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        .nav-link:hover {
+            background-color: #34495e;
+        }
+        .active {
+            background-color: #3498db;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .card-header {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+        }
+        .card-body {
+            padding: 20px;
+        }
+        .note-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre;
+            overflow-x: auto;
+            line-height: 1.5;
+            margin: 15px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        .comparison-container {
+            display: flex;
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .comparison-side {
+            flex: 1;
+        }
+        .comparison-header {
+            background-color: #3498db;
+            color: white;
+            padding: 10px 15px;
+            font-weight: bold;
+            text-align: center;
+            border-radius: 5px 5px 0 0;
+        }
+        .comparison-body {
+            background-color: white;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-top: none;
+            border-radius: 0 0 5px 5px;
+        }
+        .comparison-table {
+            width: 100%;
+        }
+        .dog250-quote {
+            background-color: #fffaf0;
+            border-left: 4px solid #f39c12;
+            padding: 15px;
+            margin: 20px 0;
+            font-style: italic;
+            border-radius: 0 4px 4px 0;
+        }
+        .seqlock-diagram {
+            width: 100%;
+            max-width: 600px;
+            margin: 20px auto;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="sidebar">
+        <div class="sidebar-header">  
+    <a href="./linux_sync_short.html" class="block">  
+        <h2 class="text-xl font-bold hover:text-blue-600 transition-colors">Linux同步原语简要版</h2>  
+    </a>  
+</div>
+        <nav>
+            <a href="linux_sync.html" class="nav-link">首页</a>
+            <a href="mutex.html" class="nav-link">互斥锁 (Mutex)</a>
+            <a href="rwlock.html" class="nav-link">读写锁 (RWLock)</a>
+            <a href="spinlock.html" class="nav-link">自旋锁 (Spinlock)</a>
+            <a href="atomic.html" class="nav-link">原子操作 (Atomic)</a>
+            <a href="semaphore.html" class="nav-link">信号量 (Semaphore)</a>
+            <a href="rcu.html" class="nav-link">RCU</a>
+            <a href="seqlock.html" class="nav-link active">顺序锁 (Seqlock)</a>
+            <a href="barrier.html" class="nav-link">内存屏障 (Barrier)</a>
+            <a href="rwbarrier.html" class="nav-link">读写屏障 (RW Barrier)</a>
+        </nav>
+    </div>
+
+    <div class="content">
+        <h1 class="text-3xl font-bold mb-6">顺序锁 (Sequence Lock)</h1>
+        
+        <div class="card">
+            <div class="card-header text-xl">顺序锁概述</div>
+            <div class="card-body">
+                <p>顺序锁（Sequence Lock，简称seqlock）是Linux内核中的一种同步机制，主要用于保护读多写少且写优先的共享数据。它的关键特性是允许读者在不阻塞写者的情况下访问共享数据，并且写者也不会被读者阻塞。这种设计特别适合需要频繁读取但较少更新的数据，例如系统时间、统计计数器等。</p>
+                
+                <h3 class="text-xl font-bold mt-4 mb-2">核心原理</h3>
+                <p>顺序锁的工作原理基于一个序列计数器（sequence counter）：</p>
+                <ul class="list-disc pl-6 mt-2">
+                    <li>序列计数器初始值为0，并且始终保持为偶数（表示无写入进行中）</li>
+                    <li><strong>写操作</strong>：开始写入前将计数器加1（变为奇数），完成写入后再加1（变回偶数）</li>
+                    <li><strong>读操作</strong>：读取前记录计数器值，读取后再次检查计数器值。如果两次值相同且为偶数，则读取有效；否则说明读取期间发生了写入，需要重试</li>
+                </ul>
+
+                <div class="seqlock-diagram mt-8">
+                    <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='500' height='300' viewBox='0 0 500 300'%3E%3Crect x='0' y='0' width='500' height='300' fill='white'/%3E%3Ctext x='250' y='30' text-anchor='middle' font-family='Arial' font-size='18' font-weight='bold'%3E顺序锁原理图%3C/text%3E%3C!-- 时间轴 --%3E%3Cline x1='50' y1='250' x2='450' y2='250' stroke='black' stroke-width='2'/%3E%3Ctext x='250' y='270' text-anchor='middle' font-family='Arial' font-size='14'%3E时间 →%3C/text%3E%3C!-- 读者线程 --%3E%3Ctext x='30' y='100' text-anchor='end' font-family='Arial' font-size='14' font-weight='bold'%3E读者%3C/text%3E%3Crect x='100' y='80' width='80' height='40' fill='lightblue' stroke='blue'/%3E%3Ctext x='140' y='105' text-anchor='middle' font-family='Arial' font-size='12'%3E读取序列号%3C/text%3E%3Crect x='180' y='80' width='120' height='40' fill='lightblue' stroke='blue'/%3E%3Ctext x='240' y='105' text-anchor='middle' font-family='Arial' font-size='12'%3E读取数据%3C/text%3E%3Crect x='300' y='80' width='80' height='40' fill='lightblue' stroke='blue'/%3E%3Ctext x='340' y='105' text-anchor='middle' font-family='Arial' font-size='12'%3E检查序列号%3C/text%3E%3C!-- 写者线程 --%3E%3Ctext x='30' y='180' text-anchor='end' font-family='Arial' font-size='14' font-weight='bold'%3E写者%3C/text%3E%3Crect x='150' y='160' width='60' height='40' fill='lightpink' stroke='red'/%3E%3Ctext x='180' y='185' text-anchor='middle' font-family='Arial' font-size='12'%3E序列号+1%3C/text%3E%3Crect x='210' y='160' width='100' height='40' fill='lightpink' stroke='red'/%3E%3Ctext x='260' y='185' text-anchor='middle' font-family='Arial' font-size='12'%3E修改数据%3C/text%3E%3Crect x='310' y='160' width='60' height='40' fill='lightpink' stroke='red'/%3E%3Ctext x='340' y='185' text-anchor='middle' font-family='Arial' font-size='12'%3E序列号+1%3C/text%3E%3C!-- 序列号变化 --%3E%3Ctext x='60' y='230' text-anchor='middle' font-family='Arial' font-size='12'%3E序列号=2%3C/text%3E%3Ctext x='180' y='230' text-anchor='middle' font-family='Arial' font-size='12'%3E序列号=3%3C/text%3E%3Ctext x='340' y='230' text-anchor='middle' font-family='Arial' font-size='12'%3E序列号=4%3C/text%3E%3C!-- 冲突标记 --%3E%3Ctext x='390' y='105' text-anchor='start' font-family='Arial' font-size='12' fill='red'%3E序列号不同，需重试%3C/text%3E%3Cpath d='M 390,100 L 380,100' stroke='red' stroke-width='1' fill='none'/%3E%3C/svg%3E" alt="顺序锁原理图" width="100%">
+                    <p class="text-center text-sm mt-2">图：顺序锁工作原理示意图 - 读者检测到序列号变化时需要重试</p>
+                </div>
+
+                <h3 class="text-xl font-bold mt-6 mb-2">顺序锁的特点</h3>
+                <div class="comparison-container">
+                    <!-- 优点 (左侧) -->
+                    <div class="comparison-side">
+                        <div class="comparison-header">优点</div>
+                        <ul class="list-disc pl-6 mt-2">
+                            <li><strong>写者优先</strong>：写者永远不会被读者阻塞</li>
+                            <li><strong>读者无锁</strong>：读者不需要获取锁，只需检查序列号</li>
+                            <li><strong>高效读取</strong>：在无写冲突时，读操作几乎没有开销</li>
+                            <li><strong>适合读多写少</strong>：特别适合频繁读取但较少更新的数据</li>
+                            <li><strong>无饥饿问题</strong>：写者不会被读者阻塞，读者通过重试可以最终成功</li>
+                        </ul>
+                    </div>
+                    
+                    <!-- 缺点 (右侧) -->
+                    <div class="comparison-side">
+                        <div class="comparison-header">缺点</div>
+                        <ul class="list-disc pl-6 mt-2">
+                            <li><strong>读者重试</strong>：写操作发生时，读者必须重试，可能导致读效率下降</li>
+                            <li><strong>仅适合小数据</strong>：适用于较小的数据结构，大型结构读取时间长增加冲突概率</li>
+                            <li><strong>写者互斥</strong>：写者之间仍然是互斥的，不能并行写入</li>
+                            <li><strong>不适合写密集型</strong>：频繁写入会导致读者频繁重试，性能下降</li>
+                            <li><strong>内存序保证</strong>：要求正确使用内存屏障来保证跨CPU的可见性</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-bold mt-6 mb-2">适用场景</h3>
+                <ul class="list-disc pl-6 mt-2">
+                    <li><strong>系统时间</strong>：Linux内核使用seqlock保护<code>xtime</code>（系统时间）</li>
+                    <li><strong>统计计数器</strong>：频繁读取但较少更新的计数器</li>
+                    <li><strong>坐标和传感器数据</strong>：需要原子读取多个相关值</li>
+                    <li><strong>读多写少的配置数据</strong>：配置数据经常被读取但很少被更新</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header text-xl">用户态与内核态顺序锁对比</div>
+            <div class="card-body">
+                <div class="comparison-container">
+                    <!-- 用户态 (左侧) -->
+                    <div class="comparison-side">
+                        <div class="comparison-header">用户态实现</div>
+                        <table class="comparison-table">
+                            <thead>
+                                <tr>
+                                    <th>API</th>
+                                    <th>描述</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>seqlock_t</code></td>
+                                    <td>顺序锁类型（用户态通常需自行实现或使用第三方库）</td>
+                                </tr>
+                                <tr>
+                                    <td><code>pthread_mutex_t</code> + <code>unsigned</code></td>
+                                    <td>顺序锁的常见用户态组合实现</td>
+                                </tr>
+                                <tr>
+                                    <td><code>std::atomic&lt;unsigned&gt;</code></td>
+                                    <td>C++11实现顺序锁的序列计数器</td>
+                                </tr>
+                                <tr>
+                                    <td>读初始化</td>
+                                    <td>读取序列号（需使用内存屏障或acquire语义）</td>
+                                </tr>
+                                <tr>
+                                    <td>读验证</td>
+                                    <td>验证序列号未变或为偶数（需使用内存屏障或acquire语义）</td>
+                                </tr>
+                                <tr>
+                                    <td>写控制</td>
+                                    <td>获取互斥锁 + 序列号递增</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="mt-4">
+                            <p><strong>用户态注意事项：</strong></p>
+                            <ul class="list-disc pl-6 mt-2">
+                                <li>用户空间标准库（如glibc）没有提供官方的顺序锁实现</li>
+                                <li>用户态实现需要特别注意内存序和屏障的正确使用</li>
+                                <li>通常需要组合互斥锁（写者互斥）和原子序列计数器</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <!-- 内核态 (右侧) -->
+                    <div class="comparison-side">
+                        <div class="comparison-header">内核态实现</div>
+                        <table class="comparison-table">
+                            <thead>
+                                <tr>
+                                    <th>API</th>
+                                    <th>描述</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><code>seqlock_t</code><br/><code>seqcount_t</code></td>
+                                    <td>内核提供的顺序锁类型，包含序列计数器和自旋锁</td>
+                                </tr>
+                                <tr>
+                                    <td><code>DEFINE_SEQLOCK(name)</code></td>
+                                    <td>静态定义并初始化一个顺序锁</td>
+                                </tr>
+                                <tr>
+                                    <td><code>seqlock_init(&sl)</code></td>
+                                    <td>动态初始化顺序锁</td>
+                                </tr>
+                                <tr>
+                                    <td><code>read_seqbegin(&sl)</code><br/><code>read_seqbegin_irqsave(&sl, flags)</code></td>
+                                    <td>开始一个读序列，返回序列号</td>
+                                </tr>
+                                <tr>
+                                    <td><code>read_seqretry(&sl, seq)</code><br/><code>read_seqretry_irqrestore(&sl, seq, flags)</code></td>
+                                    <td>检查读序列是否需要重试，返回1表示需要重试</td>
+                                </tr>
+                                <tr>
+                                    <td><code>write_seqlock(&sl)</code><br/><code>write_seqlock_irqsave(&sl, flags)</code></td>
+                                    <td>获取写入锁定</td>
+                                </tr>
+                                <tr>
+                                    <td><code>write_sequnlock(&sl)</code><br/><code>write_sequnlock_irqrestore(&sl, flags)</code></td>
+                                    <td>释放写入锁定</td>
+                                </tr>
+                                <tr>
+                                    <td><code>write_seqcount_begin(&sc)</code><br/><code>write_seqcount_end(&sc)</code></td>
+                                    <td>仅使用序列计数器（不含自旋锁）的写入函数</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                        <div class="mt-4">
+                            <p><strong>内核实现细节：</strong></p>
+                            <ul class="list-disc pl-6 mt-2">
+                                <li>内核提供了完整的顺序锁接口和实现</li>
+                                <li>有带中断保护的变体（<code>_irq</code>和<code>_irqsave</code>后缀）</li>
+                                <li>提供纯计数器模式（<code>seqcount_t</code>）和带锁模式（<code>seqlock_t</code>）</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-bold mt-6 mb-4">顺序锁内部结构</h3>
+                <div class="comparison-container">
+                    <!-- 用户态结构 (左侧) -->
+                    <div class="comparison-side">
+                        <div class="comparison-header">用户态自定义实现示例</div>
+                        <div class="code-block">
+/* 用户态自定义顺序锁实现 */
+typedef struct {
+    pthread_mutex_t lock;     /* 写者互斥锁 */
+    atomic_uint sequence;     /* 序列计数器 */
+} user_seqlock_t;
+
+/* 初始化顺序锁 */
+static inline void user_seqlock_init(user_seqlock_t *sl) {
+    pthread_mutex_init(&sl->lock, NULL);
+    atomic_init(&sl->sequence, 0);
+}
+
+/* 开始读序列 */
+static inline unsigned user_read_seqbegin(user_seqlock_t *sl) {
+    unsigned seq;
+    
+    /* 使用获取语义(acquire)保证正确读取序列号 */
+    seq = atomic_load_explicit(&sl->sequence, 
+                              memory_order_acquire);
+    return seq;
+}
+
+/* 检查读序列是否需要重试 */
+static inline int user_read_seqretry(user_seqlock_t *sl, 
+                                    unsigned start) {
+    /* 使用获取语义(acquire)保证正确读取序列号 */
+    return start & 1 || atomic_load_explicit(&sl->sequence, 
+                              memory_order_acquire) != start;
+}
+
+/* 获取写锁 */
+static inline void user_write_seqlock(user_seqlock_t *sl) {
+    pthread_mutex_lock(&sl->lock);
+    
+    /* 序列号加1(变为奇数)表示写入开始 */
+    atomic_fetch_add_explicit(&sl->sequence, 1, 
+                             memory_order_release);
+}
+
+/* 释放写锁 */
+static inline void user_write_sequnlock(user_seqlock_t *sl) {
+    /* 序列号再加1(变为偶数)表示写入结束 */
+    atomic_fetch_add_explicit(&sl->sequence, 1, 
+                             memory_order_release);
+    pthread_mutex_unlock(&sl->lock);
+}
+                        </div>
+                    </div>
+                    
+                    <!-- 内核态结构 (右侧) -->
+                    <div class="comparison-side">
+                        <div class="comparison-header">内核态实现结构</div>
+                        <div class="code-block">
+/* 来自Linux内核include/linux/seqlock.h */
+
+typedef struct {
+    struct seqcount seqcount;
+    spinlock_t lock;
+} seqlock_t;
+
+/* seqcount_t定义 */
+typedef struct seqcount {
+    unsigned sequence;
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+    struct lockdep_map dep_map;
+#endif
+} seqcount_t;
+
+/* 顺序锁的静态定义和初始化 */
+#define DEFINE_SEQLOCK(name) \
+    seqlock_t name = __SEQLOCK_UNLOCKED(name)
+
+/* 动态初始化顺序锁 */
+static inline void seqlock_init(seqlock_t *sl)
+{
+    spin_lock_init(&sl->lock);
+    seqcount_init(&sl->seqcount);
+}
+
+/* 开始读序列的实现 */
+static inline unsigned read_seqbegin(const seqlock_t *sl)
+{
+    return read_seqcount_begin(&sl->seqcount);
+}
+
+/* 检查是否需要重试的实现 */
+static inline unsigned read_seqretry(const seqlock_t *sl, 
+                                   unsigned start)
+{
+    return read_seqcount_retry(&sl->seqcount, start);
+}
+
+/* 开始写入的实现 */
+static inline void write_seqlock(seqlock_t *sl)
+{
+    spin_lock(&sl->lock);
+    write_seqcount_begin(&sl->seqcount);
+}
+
+/* 结束写入的实现 */
+static inline void write_sequnlock(seqlock_t *sl)
+{
+    write_seqcount_end(&sl->seqcount);
+    spin_unlock(&sl->lock);
+}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header text-xl">使用示例</div>
+            <div class="card-body">
+                <div class="comparison-container">
+                    <!-- 用户态示例 (左侧) -->
+                    <div class="comparison-side">
+                        <div class="comparison-header">用户态示例</div>
+                        <div class="code-block">
+#include <stdio.h>
+#include <pthread.h>
+#include <stdatomic.h>
+#include <unistd.h>
+#include <stdlib.h>
+
+/* 使用上一节中定义的user_seqlock_t */
+
+/* 共享数据结构 */
+struct shared_data {
+    double x, y, z; /* 三维坐标，需要原子读取 */
+};
+
+/* 全局变量 */
+struct shared_data data;
+user_seqlock_t data_lock;
+
+/* 更新线程：定期更新坐标 */
+void* updater_thread(void* arg) {
+    int i;
+    double angle = 0.0;
+    
+    for (i = 0; i < 20; i++) {
+        /* 获取写锁 */
+        user_write_seqlock(&data_lock);
+        
+        /* 更新共享数据(原子性更新多个值) */
+        data.x = sin(angle);
+        data.y = cos(angle);
+        data.z = tan(angle);
+        angle += 0.1;
+        
+        /* 释放写锁 */
+        user_write_sequnlock(&data_lock);
+        
+        printf("更新坐标: (%f, %f, %f)\n", 
+               data.x, data.y, data.z);
+        usleep(100000); /* 100ms */
+    }
+    return NULL;
+}
+
+/* 读取线程：读取并验证坐标 */
+void* reader_thread(void* arg) {
+    int i, retry_count = 0;
+    double x, y, z;
+    unsigned seq;
+    
+    for (i = 0; i < 50; i++) {
+        do {
+            /* 开始读序列 */
+            seq = user_read_seqbegin(&data_lock);
+            
+            /* 读取共享数据(复制到本地变量) */
+            x = data.x;
+            y = data.y;
+            z = data.z;
+            
+            /* 检查是否需要重试 */
+            if (user_read_seqretry(&data_lock, seq))
+                retry_count++;
+                
+        } while (user_read_seqretry(&data_lock, seq));
+        
+        /* 现在本地变量包含一致的数据 */
+        printf("读取坐标: (%f, %f, %f)\n", x, y, z);
+        usleep(50000); /* 50ms */
+    }
+    
+    printf("总重试次数: %d\n", retry_count);
+    return NULL;
+}
+
+int main() {
+    pthread_t updater, reader1, reader2;
+    
+    /* 初始化顺序锁 */
+    user_seqlock_init(&data_lock);
+    
+    /* 初始化共享数据 */
+    data.x = data.y = data.z = 0.0;
+    
+    /* 创建线程 */
+    pthread_create(&updater, NULL, updater_thread, NULL);
+    pthread_create(&reader1, NULL, reader_thread, NULL);
+    pthread_create(&reader2, NULL, reader_thread, NULL);
+    
+    /* 等待线程完成 */
+    pthread_join(updater, NULL);
+    pthread_join(reader1, NULL);
+    pthread_join(reader2, NULL);
+    
+    return 0;
+}
+                        </div>
+                    </div>
+                    
+                    <!-- 内核态示例 (右侧) -->
+                    <div class="comparison-side">
+                        <div class="comparison-header">内核态示例</div>
+                        <div class="code-block">
+/* Linux内核中顺序锁使用示例 */
+
+#include <linux/module.h>
+#include <linux/kernel.h>
+#include <linux/init.h>
+#include <linux/kthread.h>
+#include <linux/delay.h>
+#include <linux/seqlock.h>
+
+/* 共享数据结构 */
+struct position {
+    int x, y, z;
+};
+
+/* 全局变量 */
+static struct position global_pos;
+static DEFINE_SEQLOCK(pos_lock); /* 使用宏定义顺序锁 */
+
+/* 写入任务 */
+static int writer_func(void *data)
+{
+    int i, val = 0;
+    
+    for (i = 0; i < 20; i++) {
+        /* 获取写锁 */
+        write_seqlock(&pos_lock);
+        
+        /* 更新共享数据(原子性更新多个值) */
+        global_pos.x = val;
+        global_pos.y = val * 2;
+        global_pos.z = val * 3;
+        val++;
+        
+        /* 释放写锁 */
+        write_sequnlock(&pos_lock);
+        
+        pr_info("Writer: 更新位置 (%d, %d, %d)\n",
+                global_pos.x, global_pos.y, global_pos.z);
+        
+        /* 等待100ms */
+        msleep(100);
+    }
+    return 0;
+}
+
+/* 读取任务 */
+static int reader_func(void *data)
+{
+    int i, retry_count = 0;
+    int x, y, z;
+    unsigned seq;
+    
+    for (i = 0; i < 50; i++) {
+        /* 读取循环，直到成功 */
+        do {
+            /* 开始读序列 */
+            seq = read_seqbegin(&pos_lock);
+            
+            /* 读取共享数据(复制到本地变量) */
+            x = global_pos.x;
+            y = global_pos.y;
+            z = global_pos.z;
+            
+            /* 统计重试次数 */
+            if (read_seqretry(&pos_lock, seq))
+                retry_count++;
+                
+        } while (read_seqretry(&pos_lock, seq));
+        
+        /* 现在本地变量包含一致的数据 */
+        pr_info("Reader: 读取位置 (%d, %d, %d)\n", x, y, z);
+        
+        /* 简单验证：y应该始终是x的两倍 */
+        if (y != x * 2 || z != x * 3)
+            pr_err("数据不一致: %d, %d, %d!\n", x, y, z);
+            
+        /* 等待50ms */
+        msleep(50);
+    }
+    
+    pr_info("总重试次数: %d\n", retry_count);
+    return 0;
+}
+
+/* 多个读者线程 */
+#define NUM_READERS 3
+static struct task_struct *writer_task;
+static struct task_struct *reader_tasks[NUM_READERS];
+
+static int __init seqlock_example_init(void)
+{
+    int i;
+    
+    /* 初始化共享数据 */
+    global_pos.x = global_pos.y = global_pos.z = 0;
+    
+    /* 创建写者线程 */
+    writer_task = kthread_run(writer_func, NULL, "seqlock_writer");
+    if (IS_ERR(writer_task)) {
+        pr_err("无法创建写者线程\n");
+        return PTR_ERR(writer_task);
+    }
+    
+    /* 创建多个读者线程 */
+    for (i = 0; i < NUM_READERS; i++) {
+        reader_tasks[i] = kthread_run(reader_func, NULL, 
+                                     "seqlock_reader%d", i);
+        if (IS_ERR(reader_tasks[i])) {
+            pr_err("无法创建读者线程 %d\n", i);
+            return PTR_ERR(reader_tasks[i]);
+        }
+    }
+    
+    return 0;
+}
+
+static void __exit seqlock_example_exit(void)
+{
+    /* 模块清理：在实际模块中应该停止线程 */
+    pr_info("顺序锁示例退出\n");
+}
+
+module_init(seqlock_example_init);
+module_exit(seqlock_example_exit);
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("示例作者");
+MODULE_DESCRIPTION("顺序锁使用示例");
+                        </div>
+                    </div>
+                </div>
+
+                <div class="note-box mt-6">
+                    <h4 class="font-bold">经典使用场景：Linux内核中的jiffies_64</h4>
+                    <p>在32位系统上，读取64位jiffies值（<code>jiffies_64</code>）无法通过单一原子操作完成。Linux内核使用顺序锁保护<code>jiffies_64</code>的读取，确保获得一致的64位值。</p>
+                    <div class="code-block">
+/* kernel/time/jiffies.c中的相关代码 */
+EXPORT_SYMBOL(jiffies_64);
+EXPORT_SYMBOL(get_jiffies_64);
+
+u64 get_jiffies_64(void)
+{
+    unsigned long seq;
+    u64 ret;
+
+    do {
+        seq = read_seqbegin(&jiffies_lock);
+        ret = jiffies_64;
+    } while (read_seqretry(&jiffies_lock, seq));
+    return ret;
+}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header text-xl">使用注意事项</div>
+            <div class="card-body">
+                <div class="comparison-container">
+                    <!-- 最佳实践 (左侧) -->
+                    <div class="comparison-side">
+                        <div class="comparison-header">最佳实践</div>
+                        <ul class="list-disc pl-6 mt-2">
+                            <li><strong>本地变量存储</strong>：读取共享数据时，应该复制到本地变量，而不是直接使用指向共享数据的指针</li>
+                            <li><strong>小数据结构</strong>：顺序锁最适合保护小型数据结构，这样读取速度快，减少写入冲突概率</li>
+                            <li><strong>避免读取指针</strong>：不要读取由顺序锁保护的指针，因为被指向的内存可能在读取过程中被释放</li>
+                            <li><strong>避免写入期间休眠</strong>：写入锁定期间不应休眠或阻塞，这会延长读者重试周期</li>
+                            <li><strong>避免嵌套锁</strong>：顺序锁不应嵌套在其他锁内部，可能导致死锁</li>
+                            <li><strong>避免条件分支</strong>：顺序锁保护的读取路径应避免条件分支，以减少冲突概率</li>
+                        </ul>
+                    </div>
+                    
+                    <!-- 常见陷阱 (右侧) -->
+                    <div class="comparison-side">
+                        <div class="comparison-header">常见陷阱</div>
+                        <ul class="list-disc pl-6 mt-2">
+                            <li><strong>写者饥饿</strong>：虽然顺序锁设计上是写者优先，但如果读操作非常频繁且读取时间长，写者仍可能被延迟</li>
+                            <li><strong>环形依赖</strong>：顺序锁与其他锁混用时可能形成锁依赖环，导致死锁</li>
+                            <li><strong>忘记检查重试</strong>：忘记检查<code>read_seqretry()</code>返回值，导致使用不一致的数据</li>
+                            <li><strong>写保护不足</strong>：只使用序列计数器（<code>seqcount_t</code>）而没有互斥锁保护写操作，导致多个写者冲突</li>
+                            <li><strong>用户态实现内存序问题</strong>：用户态实现时没有正确使用内存序/屏障，导致跨CPU数据不一致</li>
+                            <li><strong>复杂结构保护</strong>：尝试使用顺序锁保护复杂的大型数据结构，导致读性能下降</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-bold mt-6 mb-2">与其他同步机制的比较</h3>
+                <table class="mt-4">
+                    <thead>
+                        <tr>
+                            <th>特性</th>
+                            <th>顺序锁 (Seqlock)</th>
+                            <th>读写锁 (RWLock)</th>
+                            <th>RCU</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>读者阻塞写者</td>
+                            <td>否</td>
+                            <td>是</td>
+                            <td>否</td>
+                        </tr>
+                        <tr>
+                            <td>写者阻塞读者</td>
+                            <td>是 (通过重试)</td>
+                            <td>是</td>
+                            <td>否</td>
+                        </tr>
+                        <tr>
+                            <td>读性能</td>
+                            <td>高(无冲突时)<br>低(有冲突时)</td>
+                            <td>中等</td>
+                            <td>非常高</td>
+                        </tr>
+                        <tr>
+                            <td>写性能</td>
+                            <td>高</td>
+                            <td>低</td>
+                            <td>中等</td>
+                        </tr>
+                        <tr>
+                            <td>适用数据结构</td>
+                            <td>小型数据结构<br>多字段原子更新</td>
+                            <td>大部分数据结构</td>
+                            <td>链表、树等指针结构</td>
+                        </tr>
+                        <tr>
+                            <td>主要优势</td>
+                            <td>写者优先<br>原子多字段更新</td>
+                            <td>简单易用<br>读共享</td>
+                            <td>无锁读取<br>高扩展性</td>
+                        </tr>
+                        <tr>
+                            <td>主要劣势</td>
+                            <td>读者可能重试多次<br>仅适用小数据结构</td>
+                            <td>读者阻塞写者<br>写性能差</td>
+                            <td>写入复杂<br>延迟释放内存</td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <div class="note-box mt-6">
+                    <h4 class="font-bold">重要注意事项：seq变量的原子性</h4>
+                    <p>在使用顺序锁时，<code>seq</code>变量必须是一个无符号整数（<code>unsigned</code>），并且必须以原子方式读取和写入。在内核实现中，这通过适当的内存屏障和原子操作保证。在用户态实现中，应使用原子操作（如C11的<code>atomic_load_explicit()</code>和<code>atomic_fetch_add_explicit()</code>）确保跨处理器的正确行为。</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header text-xl">设计原理总结</div>
+            <div class="card-body">
+                <div class="dog250-quote">
+                    <p>顺序锁（seqlock）是一个典型的"计数器优化同步"范例，它巧妙地利用了计数器的奇偶性作为写入状态的指示器，避免了传统锁定的开销。本质上，它是一种"乐观并发控制"机制，读者假设数据通常处于稳定状态，仅在检测到冲突时才进行重试。</p>
+                    
+                    <p class="mt-4">从设计哲学角度，顺序锁体现了"写者优先"原则，这与读写锁的"读者优先"形成对比。这种设计选择反映了一个观察：对于系统关键数据（如时间戳、坐标等），写操作虽然不频繁，但往往更为紧急和重要，因此应优先进行。</p>
+                    
+                    <p class="mt-4">顺序锁的设计深刻理解了读写操作的不对称性：写入必须排他进行，而读取可以并发执行，但可以在必要时重试。这种"允许读取失败但快速重试"的机制，体现了系统设计中的"快速路径优化"思想——优化最常见的场景（无冲突读取），而为罕见场景（读写冲突）提供合理的退路。</p>
+                    
+                    <p class="mt-4">有趣的是，顺序锁解决的本质问题是"原子性多变量读取"。在现代CPU上，单变量读写通常是原子的，但读取多个相关变量时不能保证它们作为一个整体的原子性。顺序锁提供了一种优雅的解决方案，通过序列号检测机制确保多变量读取的一致性，而不需要昂贵的锁定操作。</p>
+                    
+                    <p class="mt-4">从实现角度，顺序锁是一个极简主义的杰作：它仅依赖一个序列计数器和一个写保护锁，却解决了复杂的同步问题。它证明了在并发设计中，简单而精确的机制往往比复杂解决方案更有效。这是Unix设计哲学"做一件事并做好它"的完美体现。</p>
+                </div>
+            </div>
+        </div>
+    </div>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>

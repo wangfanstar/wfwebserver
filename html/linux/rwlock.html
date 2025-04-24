@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux同步原语对比 - 读写锁</title>
+    <link rel="stylesheet" href="../tailwind.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+        }
+        .content {
+            margin-left: 250px;
+            padding: 20px;
+            width: calc(100% - 250px);
+        }
+        .sidebar-header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #34495e;
+        }
+        .nav-link {
+            display: block;
+            padding: 15px 20px;
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        .nav-link:hover {
+            background-color: #34495e;
+        }
+        .active {
+            background-color: #3498db;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .card-header {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+        }
+        .card-body {
+            padding: 20px;
+        }
+        .note-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre;
+            overflow-x: auto;
+            line-height: 1.5;
+            margin: 15px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="sidebar">
+        <div class="sidebar-header">  
+    <a href="./linux_sync_short.html" class="block">  
+        <h2 class="text-xl font-bold hover:text-blue-600 transition-colors">Linux同步原语简要版</h2>  
+    </a>  
+</div>
+        <nav>
+            <a href="linux_sync.html" class="nav-link">首页</a>
+            <a href="mutex.html" class="nav-link">互斥锁 (Mutex)</a>
+            <a href="rwlock.html" class="nav-link active">读写锁 (RWLock)</a>
+            <a href="spinlock.html" class="nav-link">自旋锁 (Spinlock)</a>
+            <a href="atomic.html" class="nav-link">原子操作 (Atomic)</a>
+            <a href="semaphore.html" class="nav-link">信号量 (Semaphore)</a>
+            <a href="rcu.html" class="nav-link">RCU</a>
+            <a href="seqlock.html" class="nav-link">顺序锁 (Seqlock)</a>
+            <a href="barrier.html" class="nav-link">内存屏障 (Barrier)</a>
+            <a href="rwbarrier.html" class="nav-link">读写屏障 (RW Barrier)</a>
+        </nav>
+    </div>
+
+    <div class="content">
+        <h1 class="text-3xl font-bold mb-6">读写锁 (RWLock)</h1>
+        
+        <div class="card">
+            <div class="card-header">读写锁概述</div>
+            <div class="card-body">
+                <p class="mb-4">读写锁是一种特殊的锁机制，它把对共享资源的访问者划分成读者和写者。读写锁允许多个读者同时访问共享资源，但只允许一个写者访问共享资源，且写者访问时排斥所有的读者。这种锁适用于读操作远多于写操作的场景。</p>
+                
+                <p class="mb-4">读写锁的主要特点是：</p>
+                <ul class="list-disc ml-8 mb-4">
+                    <li>读-读不互斥：多个线程可以同时获得读锁</li>
+                    <li>读-写互斥：当有线程持有读锁时，写锁请求会被阻塞</li>
+                    <li>写-写互斥：当有线程持有写锁时，其他写锁请求会被阻塞</li>
+                    <li>写-读互斥：当有线程持有写锁时，所有读锁请求会被阻塞</li>
+                </ul>
+                
+                <div class="note-box">
+                    <h3 class="font-bold text-lg mb-2">总结</h3>
+                    <p>读写锁设计的精妙之处在于"读共享写独占"的权衡取舍，直击多线程并发场景中"读多写少"的特性。用户态pthread_rwlock是睡眠式实现，而内核态rwlock_t却采用了自旋方式，这一差异反映了内核中锁竞争需要更快响应的现实。内核中还专门提供了读优先(rwlock_t)和写优先(brlock_t)两种不同偏向性的实现，以应对不同场景。记住，读写锁虽然提高了并发度，但也增加了复杂度，特别是对写者的"饥饿"问题要格外关注。内核态rwlock的精髓在于"读取必须快速"的思想，这也是为什么要用自旋方式而不是睡眠方式的根本原因。一旦在关键路径上使用了不当的锁策略，性能会有数量级的下降。锁的选择永远没有银弹，只有合适的权衡。</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">用户态与内核态读写锁对比</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-center">用户态 (Pthread RWLock)</h3>
+                        <table>
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;pthread.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>pthread_rwlock_t</code></td>
+                            </tr>
+                            <tr>
+                                <th>静态初始化</th>
+                                <td><code>pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;</code></td>
+                            </tr>
+                            <tr>
+                                <th>动态初始化</th>
+                                <td><code>int pthread_rwlock_init(pthread_rwlock_t *rwlock, const pthread_rwlockattr_t *attr);</code></td>
+                            </tr>
+                            <tr>
+                                <th>读锁定</th>
+                                <td><code>int pthread_rwlock_rdlock(pthread_rwlock_t *rwlock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>尝试读锁定</th>
+                                <td><code>int pthread_rwlock_tryrdlock(pthread_rwlock_t *rwlock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>超时读锁定</th>
+                                <td><code>int pthread_rwlock_timedrdlock(pthread_rwlock_t *rwlock, const struct timespec *abstime);</code></td>
+                            </tr>
+                            <tr>
+                                <th>写锁定</th>
+                                <td><code>int pthread_rwlock_wrlock(pthread_rwlock_t *rwlock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>尝试写锁定</th>
+                                <td><code>int pthread_rwlock_trywrlock(pthread_rwlock_t *rwlock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>超时写锁定</th>
+                                <td><code>int pthread_rwlock_timedwrlock(pthread_rwlock_t *rwlock, const struct timespec *abstime);</code></td>
+                            </tr>
+                            <tr>
+                                <th>解锁</th>
+                                <td><code>int pthread_rwlock_unlock(pthread_rwlock_t *rwlock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>销毁</th>
+                                <td><code>int pthread_rwlock_destroy(pthread_rwlock_t *rwlock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>属性初始化</th>
+                                <td><code>int pthread_rwlockattr_init(pthread_rwlockattr_t *attr);</code></td>
+                            </tr>
+                            <tr>
+                                <th>属性销毁</th>
+                                <td><code>int pthread_rwlockattr_destroy(pthread_rwlockattr_t *attr);</code></td>
+                            </tr>
+                            <tr>
+                                <th>设置共享属性</th>
+                                <td><code>int pthread_rwlockattr_setpshared(pthread_rwlockattr_t *attr, int pshared);</code></td>
+                            </tr>
+                            <tr>
+                                <th>获取共享属性</th>
+                                <td><code>int pthread_rwlockattr_getpshared(const pthread_rwlockattr_t *attr, int *pshared);</code></td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-center">内核态 (Kernel RWLock)</h3>
+                        <table>
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;linux/rwlock.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>rwlock_t</code></td>
+                            </tr>
+                            <tr>
+                                <th>静态初始化</th>
+                                <td><code>DEFINE_RWLOCK(name);</code></td>
+                            </tr>
+                            <tr>
+                                <th>动态初始化</th>
+                                <td><code>void rwlock_init(rwlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>读锁定</th>
+                                <td><code>void read_lock(rwlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>尝试读锁定</th>
+                                <td><code>int read_trylock(rwlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>不可中断读锁定</th>
+                                <td><code>void read_lock_bh(rwlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>中断禁用读锁定</th>
+                                <td><code>void read_lock_irq(rwlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>保存中断读锁定</th>
+                                <td><code>void read_lock_irqsave(rwlock_t *lock, unsigned long flags);</code></td>
+                            </tr>
+                            <tr>
+                                <th>写锁定</th>
+                                <td><code>void write_lock(rwlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>尝试写锁定</th>
+                                <td><code>int write_trylock(rwlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>不可中断写锁定</th>
+                                <td><code>void write_lock_bh(rwlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>中断禁用写锁定</th>
+                                <td><code>void write_lock_irq(rwlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>保存中断写锁定</th>
+                                <td><code>void write_lock_irqsave(rwlock_t *lock, unsigned long flags);</code></td>
+                            </tr>
+                            <tr>
+                                <th>读解锁</th>
+                                <td><code>void read_unlock(rwlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>读解锁(中断相关)</th>
+                                <td>
+                                    <code>void read_unlock_bh(rwlock_t *lock);</code><br>
+                                    <code>void read_unlock_irq(rwlock_t *lock);</code><br>
+                                    <code>void read_unlock_irqrestore(rwlock_t *lock, unsigned long flags);</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>写解锁</th>
+                                <td><code>void write_unlock(rwlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>写解锁(中断相关)</th>
+                                <td>
+                                    <code>void write_unlock_bh(rwlock_t *lock);</code><br>
+                                    <code>void write_unlock_irq(rwlock_t *lock);</code><br>
+                                    <code>void write_unlock_irqrestore(rwlock_t *lock, unsigned long flags);</code>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">使用场景</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">用户态 (Pthread RWLock)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>读操作频繁，写操作较少的共享数据</li>
+                            <li>读取时不修改的数据结构，如配置信息</li>
+                            <li>需要提高并发读取效率的场景</li>
+                            <li>读操作耗时较长，但写操作相对较少的场景</li>
+                            <li>数据库系统中的表缓存</li>
+                            <li>DNS缓存等读多写少的缓存系统</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">内核态 (Kernel RWLock)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>保护内核中读多写少的数据结构</li>
+                            <li>需要在各种上下文（中断、非中断）中使用的锁</li>
+                            <li>网络协议栈中的路由表等读多写少的数据</li>
+                            <li>文件系统的缓存数据</li>
+                            <li>短时间内锁定的读多写少资源（内核rwlock是自旋锁）</li>
+                            <li>需要区分读写操作且不希望读操作相互阻塞的场景</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">注意事项</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">用户态 (Pthread RWLock)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>不要在持有读锁的情况下请求写锁（可能导致死锁）</li>
+                            <li>写锁和读锁必须成对使用，特别注意在条件分支中的解锁</li>
+                            <li>读写锁相比互斥锁有更大的开销，只在读操作明显多于写操作时使用</li>
+                            <li>写锁请求可能导致读锁请求被饿死（取决于实现）</li>
+                            <li>某些实现中写锁优先级高于读锁</li>
+                            <li>POSIX标准没有规定读写锁是否可重入</li>
+                            <li>所有函数返回值为0表示成功，非0表示错误</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">内核态 (Kernel RWLock)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>内核rwlock是自旋锁实现，不会导致线程睡眠</li>
+                            <li>持有rwlock时不能休眠或调用可能导致休眠的函数</li>
+                            <li>长时间持有rwlock会导致性能问题</li>
+                            <li>必须匹配正确的锁定和解锁函数（特别是中断上下文相关版本）</li>
+                            <li>中断上下文使用时，必须用_irq或_irqsave版本</li>
+                            <li>使用_irqsave版本时，必须保存flags并在解锁时恢复</li>
+                            <li>读锁不可递归，同一线程多次获取读锁可能导致死锁</li>
+                            <li>写者有可能饿死（长时间无法获得锁）</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">使用示例</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">用户态 (Pthread RWLock)</h3>
+                        <div class="code-block">
+#include &lt;pthread.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;unistd.h&gt;
+
+pthread_rwlock_t rwlock;
+int shared_value = 0;
+
+void* reader_thread(void* arg) {
+    int id = *(int*)arg;
+    int i;
+    
+    for (i = 0; i < 5; i++) {
+        // 获取读锁
+        pthread_rwlock_rdlock(&rwlock);
+        
+        printf("Reader %d: read shared value: %d\n", id, shared_value);
+        usleep(500000);  // 模拟读操作耗时
+        
+        // 释放读锁
+        pthread_rwlock_unlock(&rwlock);
+        
+        usleep(200000);  // 间隔一段时间再次读取
+    }
+    
+    return NULL;
+}
+
+void* writer_thread(void* arg) {
+    int id = *(int*)arg;
+    int i;
+    
+    for (i = 0; i < 3; i++) {
+        usleep(1000000);  // 让读者先执行一段时间
+        
+        // 获取写锁
+        pthread_rwlock_wrlock(&rwlock);
+        
+        shared_value++;
+        printf("Writer %d: updated shared value to %d\n", id, shared_value);
+        usleep(1000000);  // 模拟写操作耗时
+        
+        // 释放写锁
+        pthread_rwlock_unlock(&rwlock);
+    }
+    
+    return NULL;
+}
+
+int main() {
+    pthread_t readers[3], writers[2];
+    int reader_ids[3] = {1, 2, 3};
+    int writer_ids[2] = {1, 2};
+    int i;
+    
+    // 初始化读写锁
+    pthread_rwlock_init(&rwlock, NULL);
+    
+    // 创建读线程
+    for (i = 0; i < 3; i++) {
+        pthread_create(&readers[i], NULL, reader_thread, &reader_ids[i]);
+    }
+    
+    // 创建写线程
+    for (i = 0; i < 2; i++) {
+        pthread_create(&writers[i], NULL, writer_thread, &writer_ids[i]);
+    }
+    
+    // 等待所有线程结束
+    for (i = 0; i < 3; i++) {
+        pthread_join(readers[i], NULL);
+    }
+    for (i = 0; i < 2; i++) {
+        pthread_join(writers[i], NULL);
+    }
+    
+    // 销毁读写锁
+    pthread_rwlock_destroy(&rwlock);
+    
+    return 0;
+}
+</div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">内核态 (Kernel RWLock)</h3>
+                        <div class="code-block">
+#include &lt;linux/module.h&gt;
+#include &lt;linux/kernel.h&gt;
+#include &lt;linux/init.h&gt;
+#include &lt;linux/rwlock.h&gt;
+#include &lt;linux/kthread.h&gt;
+#include &lt;linux/delay.h&gt;
+
+// 定义读写锁和共享数据
+static DEFINE_RWLOCK(my_rwlock);
+static int shared_value = 0;
+
+// 读线程函数
+static int reader_func(void *data)
+{
+    int id = *(int*)data;
+    int i;
+    
+    for (i = 0; i < 5 && !kthread_should_stop(); i++) {
+        // 获取读锁
+        read_lock(&my_rwlock);
+        
+        // 读取并打印共享数据
+        printk(KERN_INFO "Reader %d: read shared value: %d\n", id, shared_value);
+        msleep(500);  // 模拟读操作耗时
+        
+        // 释放读锁
+        read_unlock(&my_rwlock);
+        
+        msleep(200);  // 间隔一段时间再次读取
+    }
+    
+    return 0;
+}
+
+// 写线程函数
+static int writer_func(void *data)
+{
+    int id = *(int*)data;
+    int i;
+    
+    for (i = 0; i < 3 && !kthread_should_stop(); i++) {
+        msleep(1000);  // 让读者先执行一段时间
+        
+        // 获取写锁
+        write_lock(&my_rwlock);
+        
+        // 修改共享数据并打印
+        shared_value++;
+        printk(KERN_INFO "Writer %d: updated shared value to %d\n", id, shared_value);
+        msleep(1000);  // 模拟写操作耗时
+        
+        // 释放写锁
+        write_unlock(&my_rwlock);
+    }
+    
+    return 0;
+}
+
+// 读写线程任务
+static struct task_struct *reader_threads[3];
+static struct task_struct *writer_threads[2];
+static int reader_ids[3] = {1, 2, 3};
+static int writer_ids[2] = {1, 2};
+
+static int __init rwlock_example_init(void)
+{
+    int i;
+    
+    printk(KERN_INFO "RWLock Example: Initializing module\n");
+    
+    // 创建读线程
+    for (i = 0; i < 3; i++) {
+        char name[32];
+        snprintf(name, sizeof(name), "reader-%d", i);
+        reader_threads[i] = kthread_run(reader_func, &reader_ids[i], name);
+        if (IS_ERR(reader_threads[i])) {
+            printk(KERN_ERR "Failed to create reader thread %d\n", i);
+            return PTR_ERR(reader_threads[i]);
+        }
+    }
+    
+    // 创建写线程
+    for (i = 0; i < 2; i++) {
+        char name[32];
+        snprintf(name, sizeof(name), "writer-%d", i);
+        writer_threads[i] = kthread_run(writer_func, &writer_ids[i], name);
+        if (IS_ERR(writer_threads[i])) {
+            printk(KERN_ERR "Failed to create writer thread %d\n", i);
+            return PTR_ERR(writer_threads[i]);
+        }
+    }
+    
+    return 0;
+}
+
+static void __exit rwlock_example_exit(void)
+{
+    int i;
+    
+    // 停止所有线程
+    for (i = 0; i < 3; i++) {
+        if (reader_threads[i]) {
+            kthread_stop(reader_threads[i]);
+        }
+    }
+    
+    for (i = 0; i < 2; i++) {
+        if (writer_threads[i]) {
+            kthread_stop(writer_threads[i]);
+        }
+    }
+    
+    printk(KERN_INFO "RWLock Example: Module unloaded\n");
+}
+
+module_init(rwlock_example_init);
+module_exit(rwlock_example_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Example");
+MODULE_DESCRIPTION("RWLock Example");
+</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="mt-8 text-center text-gray-500 text-sm">
+            <p>© 2025 Linux同步原语对比 - 本网站仅供学习参考</p>
+        </footer>
+    </div>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>

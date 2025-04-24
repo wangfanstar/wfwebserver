@@ -1,112 +1,215 @@
-// data.js  
-const branchData = {  
-    trunk: {  
-        id: 'trunk',  
-        title: '主线B75 TRUNK（V7R31）',  
-        description: '主干开发分支，用于新特性开发',  
-        items: [  
-            {  
-                label: '主线负责人',  
-                type: 'copy',  
-                content: 'test1@example.com test2@example.com'  
-            },  
-            {  
-                label: '主线说明',  
-                type: 'text',  
-                content: 'TEST-X B75主线代码库，用于新特性开发'  
-            },  
-            {  
-                label: 'DRV库地址',  
-                type: 'copy',  
-                content: 'http://test.example.com/TEST-X_CODE/V7R1_SPRING/trunk/DRV'  
-            },  
-            {  
-                label: 'PUBLIC库地址',  
-                type: 'copy',  
-                content: 'http://test.example.com/public-code/V7R1_SPRING/trunk/PUBLIC'  
-            },  
-            {  
-                label: '北京编译lib地址',  
-                type: 'copy',  
-                content: '-d /var/testlib/V7R1_SPRING/trunk/'  
-            },  
-            {  
-                label: '杭州编译lib地址',  
-                type: 'copy',  
-                content: '-d /mnt/testlib/V7R1_SPRING/trunk/'  
-            },  
-            {  
-                label: '文件服务器地址',  
-                type: 'copy',  
-                content: 'file://test.example.com/testlib/V7R1_SPRING/trunk/'  
-            }  
-        ]  
-    },  
-    d086sp: {  
-        id: 'd086sp',  
-        title: '维护D086SP',  
-        description: 'D086SP维护分支，用于问题修复',  
-        items: [  
-            {  
-                label: 'DRV库地址',  
-                type: 'copy',  
-                content: 'http://test.example.com/TEST-X_CODE/V7R1_D086SP/trunk/DRV'  
-            },  
-            {  
-                label: 'PUBLIC库地址',  
-                type: 'copy',  
-                content: 'http://test.example.com/public-code/V7R1_D086SP/trunk/PUBLIC'  
-            },  
-            {  
-                label: '北京编译lib地址',  
-                type: 'copy',  
-                content: '-d /var/testlib/V7R1_D086SP/trunk/'  
-            },  
-            {  
-                label: '杭州编译lib地址',  
-                type: 'copy',  
-                content: '-d /mnt/testlib/V7R1_D086SP/trunk/'  
-            },  
-            {  
-                label: '文件服务器地址',  
-                type: 'copy',  
-                content: 'file://test.example.com/testlib/V7R1_D086SP/trunk/'  
-            }  
-        ]  
-    },  
-    d099sp: {  
-        id: 'd099sp',  
-        title: '主线D099SP',  
-        description: 'D099SP维护分支，用于问题修复',  
-        items: [  
-            {  
-                label: 'DRV库地址',  
-                type: 'copy',  
-                content: 'http://test.example.com/TEST-X_CODE/V7R1_D099SP/trunk/DRV'  
-            },  
-            {  
-                label: 'PUBLIC库地址',  
-                type: 'copy',  
-                content: 'http://test.example.com/public-code/V7R1_D099SP/trunk/PUBLIC'  
-            },  
-            {  
-                label: '北京编译lib地址',  
-                type: 'copy',  
-                content: '-d /var/testlib/V7R1_D099SP/trunk/'  
-            },  
-            {  
-                label: '杭州编译lib地址',  
-                type: 'copy',  
-                content: '-d /mnt/testlib/V7R1_D099SP/trunk/'  
-            },  
-            {  
-                label: '文件服务器地址',  
-                type: 'copy',  
-                content: 'file://test.example.com/testlib/V7R1_D099SP/trunk/'  
-            }  
-        ]  
-    }  
-};  
+const mainlineInfo = {
+    title: '主线信息',
+    items: [
+        {
+            label: '主线负责人',
+            type: 'copy',
+            content: 'yanglan@h3c.com zhangzongsheng.07463@h3c.com'
+        },
+        {
+            label: '主线说明',
+            type: 'text',
+            content: 'SR8800-X B75主线代码库，用于新特性开发'
+        }
+    ]
+};
+
+const branchData = {
+    trunk_b75: {
+        id: 'trunk_b75',
+        title: '主线B75 TRUNK（V7R31）',
+        description: '主干开发分支，用于新特性开发',
+        items: [
+            {
+                label: 'CI命令',
+                type: 'copy',
+                content: ' -e cr16000e.ipe -s V7R1_SPRINGB75/trunk  -r '
+            },
+            {
+                label: 'DRV库地址',
+                type: 'copy',
+                content: 'http://10.165.104.66/SR8800-X_CODE/V7R1_SPRINGB75/trunk/DRV'
+            },
+            {
+                label: 'PUBLIC库地址',
+                type: 'copy',
+                content: 'http://10.153.120.104/cmwcode-public/V7R1_SPRINGB75/trunk/PUBLIC'
+            },
+            {
+                label: '北京编译lib地址',
+                type: 'copy',
+                content: '-d /var/mntcmmold/V7R1_SPRINGB75/trunk/'
+            },
+            {
+                label: '杭州编译lib地址',
+                type: 'copy',
+                content: '-d /mnt/cilib_old/V7R1_SPRINGB75/trunk/'
+            },
+            {
+                label: '文件服务器地址',
+                type: 'copy',
+                content: 'file://10.153.3.125/cilib-old/V7R1_SPRINGB75/trunk/'
+            },
+            {
+                label: '标题模板(普通)',
+                type: 'copy',
+                content: '【SR88产品B75Trunk】【模块 问题级别】'
+            },
+            {
+                label: '标题模板(BRAS)',
+                type: 'copy',
+                content: '【SR88产品B75Trunk】【BRAS领域】【模块 问题级别】'
+            },
+            {
+                label: '审批人',
+                type: 'copy',
+                content: 'fanjian_kong@h3c.com'
+            }
+        ]
+    },
+    d086sp: {
+        id: 'd086sp',
+        title: '维护D086SP',
+        description: 'D086SP维护分支，用于问题修复',
+        items: [
+            {
+                label: 'CI命令',
+                type: 'copy',
+                content: '-e cr16000e.ipe -s V7R1_B75D071SP8X_SR88/trunk  -r'
+            },
+            {
+                label: 'DRV库地址',
+                type: 'copy',
+                content: 'http://10.165.104.66/SR8800-X_CODE/V7R1_B75D086SP8X_SR88/trunk/DRV'
+            },
+            {
+                label: 'PUBLIC库地址',
+                type: 'copy',
+                content: 'http://10.153.120.104/cmwcode-public/V7R1_B75D071SP8X_SR88/trunk/PUBLIC'
+            },
+            {
+                label: '北京编译lib地址',
+                type: 'copy',
+                content: '-d /var/mntcmmold/V7R1_B75D086SP8X_SR88/trunk/'
+            },
+            {
+                label: '杭州编译lib地址',
+                type: 'copy',
+                content: '-d /mnt/cilib_old/V7R1_B75D086SP8X_SR88/trunk/'
+            },
+            {
+                label: '文件服务器地址',
+                type: 'copy',
+                content: 'file://10.153.3.125/cilib-old/V7R1_B75D086SP8X_SR88/trunk/'
+            },
+            {
+                label: '标题模板(普通)',
+                type: 'copy',
+                content: '【SR88B75D086SP维护分支】【模块 问题级别】'
+            },
+            {
+                label: '标题模板(BRAS)',
+                type: 'copy',
+                content: '【SR88B75D086SP维护分支】【BRAS领域】【模块 问题级别】'
+            },
+            {
+                label: '审批人',
+                type: 'copy',
+                content: 'pengjiajun.07318@h3c.com'
+            }
+        ]
+    },
+    d099sp: {
+        id: 'd099sp',
+        title: '主线D099SP',
+        description: 'D099SP维护分支，用于问题修复',
+        items: [
+            {
+                label: 'DRV库地址',
+                type: 'copy',
+                content: 'http://10.165.104.66/SR8800-X_CODE/V7R1_B75D099SP/trunk/DRV'
+            },
+            {
+                label: 'PUBLIC库地址',
+                type: 'copy',
+                content: 'http://10.153.120.104/cmwcode-public/V7R1_B75D099SP/trunk/PUBLIC'
+            },
+            {
+                label: '北京编译lib地址',
+                type: 'copy',
+                content: '-d /var/mntcmmold/V7R1_B75D099SP/trunk/'
+            },
+            {
+                label: '杭州编译lib地址',
+                type: 'copy',
+                content: '-d /mnt/cilib_old/V7R1_B75D099SP/trunk/'
+            },
+            {
+                label: '文件服务器地址',
+                type: 'copy',
+                content: 'file://10.153.3.125/cilib-old/V7R1_B75D099SP/trunk/'
+            },
+            {
+                label: '标题模板(普通)',
+                type: 'copy',
+                content: '【SR88B75D086SP维护分支】【模块 问题级别】'
+            },
+            {
+                label: '标题模板(BRAS)',
+                type: 'copy',
+                content: '【SR88B75D086SP维护分支】【BRAS领域】【模块 问题级别】'
+            },
+            {
+                label: '审批人',
+                type: 'copy',
+                content: 'daibingqi@h3c.com'
+            }
+        ]
+    },
+    crd086sp: {
+        id: 'crd086sp',
+        title: 'CR D086SP',
+        description: 'CR D086SP维护分支',
+        items: [
+            {
+                label: 'DRV库地址',
+                type: 'copy',
+                content: 'http://10.153.120.117/cr_code/drv/V7R1_B75D086SP/trunk/DRV'
+            },
+            {
+                label: 'PUBLIC库地址',
+                type: 'copy',
+                content: 'http://10.153.120.104/cmwcode-public/V7R1_B75D086SP/trunk/PUBLIC'
+            },
+            {
+                label: '北京编译lib地址',
+                type: 'copy',
+                content: '-d /var/mntcmmold/V7R1_B75D086SP/trunk/'
+            },
+            {
+                label: '杭州编译lib地址',
+                type: 'copy',
+                content: '-d /mnt/cilib_old/V7R1_B75D086SP/trunk/'
+            },
+            {
+                label: '文件服务器地址',
+                type: 'copy',
+                content: 'file://10.153.3.125/cilib-old/V7R1_B75D086SP/trunk'
+            },
+            {
+                label: '文件服务器地址2',
+                type: 'copy',
+                content: 'file://10.153.3.125/cilib-old/V7R1_B75D086SP/COMWAREV700R001B75D086SP1601'
+            },
+            {
+                label: '标题模板(普通)',
+                type: 'copy',
+                content: '【CRB75D086SP维护分支】【模块 问题级别】'
+            }
+        ]
+    }
+};
+
 
 // 确保数据可以被其他文件访问  
 window.branchData = branchData;

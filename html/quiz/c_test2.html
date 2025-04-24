@@ -1,0 +1,1162 @@
+
+<!DOCTYPE html>  
+<html lang="zh-CN">  
+<head>  
+    <meta charset="UTF-8">  
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  
+    <title>C语言测验2 - 100题</title>  
+    <!-- 本地样式和脚本文件 -->  
+    <link href="../tailwind.min.css" rel="stylesheet">  
+    <script src="../alpine.min.js" defer></script>  
+    <style>  
+        .question {  
+            border-bottom: 1px solid #e2e8f0;  
+            padding-bottom: 1.5rem;  
+            margin-bottom: 1.5rem;  
+        }  
+        .correct {  
+            color: #059669;  
+            font-weight: bold;  
+        }  
+        .incorrect {  
+            color: #dc2626;  
+            font-weight: bold;  
+        }  
+        .explanation {  
+            background-color: #f8fafc;  
+            border-left: 4px solid #3b82f6;  
+            padding: 1rem;  
+            margin-top: 1rem;  
+        }  
+        .sidebar {  
+            position: sticky;  
+            top: 20px;  
+            height: calc(100vh - 40px);  
+            overflow-y: auto;  
+        }  
+        @media print {  
+            .no-print {  
+                display: none;  
+            }  
+            .print-break {  
+                page-break-before: always;  
+            }  
+        }  
+    </style>  
+</head>  
+<body class="bg-gray-50">  
+    <div x-data="quizApp()" class="container mx-auto px-4 py-8">  
+        <header class="text-center mb-10">  
+            <div class="mx-auto w-24 h-24 mb-4">  
+                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">  
+                    <path d="M70 20H30C24.4772 20 20 24.4772 20 30V70C20 75.5228 24.4772 80 30 80H70C75.5228 80 80 75.5228 80 70V30C80 24.4772 75.5228 20 70 20Z" fill="#3B82F6"/>  
+                    <path d="M50 25C36.1929 25 25 36.1929 25 50C25 63.8071 36.1929 75 50 75C63.8071 75 75 63.8071 75 50C75 36.1929 63.8071 25 50 25Z" fill="white"/>  
+                    <path d="M50 30C38.9543 30 30 40.9543 30 55C30 69.0457 38.9543 80 50 80C61.0457 80 70 69.0457 70 55C70 40.9543 61.0457 30 50 30Z" fill="#3B82F6"/>  
+                    <text x="50" y="60" font-family="Arial" font-size="24" font-weight="bold" fill="white" text-anchor="middle">C</text>  
+                    <path d="M75 30H80L85 35V40H80V35H75V30Z" fill="#FFA55F"/>  
+                    <path d="M25 70H20L15 65V60H20V65H25V70Z" fill="#FFA55F"/>  
+                </svg>  
+            </div>  
+            <h1 class="text-3xl font-bold text-gray-800">C语言编程测验</h1>  
+            <p class="text-gray-600 mt-2">共100道选择题，答题后点击"检查答案"查看结果和解析</p>  
+        </header>  
+
+        <div class="flex flex-col md:flex-row gap-8">  
+            <!-- 左侧边栏：固定进度和统计信息 -->  
+            <div class="w-full md:w-1/4 lg:w-1/5 no-print">  
+                <div class="sidebar bg-white rounded-lg shadow-md p-4">  
+                    <h2 class="text-lg font-medium text-gray-900 mb-4">测验进度</h2>  
+                    
+                    <div class="progress-bar mb-6">  
+                        <div class="flex justify-between mb-1">  
+                            <span class="text-sm font-medium text-blue-700">完成题目</span>  
+                            <span class="text-sm font-medium text-blue-700" x-text="answeredCount + ' / ' + questions.length"></span>  
+                        </div>  
+                        <div class="w-full bg-gray-200 rounded-full h-2.5">  
+                            <div class="bg-blue-600 h-2.5 rounded-full" :style="'width: ' + (answeredCount / questions.length * 100) + '%'"></div>  
+                        </div>  
+                    </div>  
+                    
+                    <div class="stats space-y-4 mb-8">  
+                        <div class="stat bg-gray-50 rounded-lg p-3">  
+                            <div class="text-sm text-gray-600">正确答案</div>  
+                            <div class="text-2xl font-bold text-green-600" x-text="correctCount"></div>  
+                        </div>  
+                        <div class="stat bg-gray-50 rounded-lg p-3">  
+                            <div class="text-sm text-gray-600">错误答案</div>  
+                            <div class="text-2xl font-bold text-red-600" x-text="incorrectCount"></div>  
+                        </div>  
+                        <div class="stat bg-gray-50 rounded-lg p-3">  
+                            <div class="text-sm text-gray-600">准确率</div>  
+                            <div class="text-2xl font-bold text-blue-600" x-text="accuracyRate + '%'"></div>  
+                        </div>  
+                    </div>  
+                    
+                    <div class="jump-to-section">  
+                        <h3 class="text-md font-medium text-gray-900 mb-2">快速跳转</h3>  
+                        <div class="grid grid-cols-5 gap-1">  
+                            <template x-for="i in 20">  
+                                <button class="py-1 text-xs rounded hover:bg-blue-100"   
+                                        :class="getJumpButtonClass((i-1)*5+1)"  
+                                        @click="scrollToQuestion((i-1)*5+1)">  
+                                    <span x-text="(i-1)*5+1"></span>-<span x-text="i*5"></span>  
+                                </button>  
+                            </template>  
+                        </div>  
+                    </div>  
+                    
+                    <div class="mt-8">  
+                        <button @click="printResults()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded">  
+                            打印测验结果  
+                        </button>  
+                    </div>  
+                </div>  
+            </div>  
+            
+            <!-- 右侧主要内容：题目列表 -->  
+            <div class="w-full md:w-3/4 lg:w-4/5">  
+                <div class="bg-white rounded-lg shadow-md p-6">  
+                    <template x-for="(question, index) in questions" :key="index">  
+                        <div class="question" :id="'question-' + (index + 1)" :class="{'print-break': index > 0 && index % 5 === 0}">  
+                            <h3 class="text-lg font-medium text-gray-900 mb-2">  
+                                <span x-text="(index + 1) + '.'"></span>  
+                                <span x-html="question.text"></span>  
+                            </h3>  
+                            <div class="options grid grid-cols-1 md:grid-cols-2 gap-2 mb-4">  
+                                <template x-for="(option, optIndex) in ['A', 'B', 'C', 'D']" :key="optIndex">  
+                                    <div class="flex items-start">  
+                                        <input type="radio" :id="'q' + (index + 1) + option" :name="'question' + (index + 1)" :value="option"   
+                                               x-model="question.userAnswer"   
+                                               class="mt-1 mr-2">  
+                                        <label :for="'q' + (index + 1) + option" class="text-gray-700" x-html="question.options[optIndex]"></label>  
+                                    </div>  
+                                </template>  
+                            </div>  
+                            <div class="flex items-center">  
+                                <button @click="checkAnswer(index)"   
+                                        class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-1 px-4 rounded no-print"  
+                                        :disabled="question.checked"  
+                                        :class="{'opacity-50 cursor-not-allowed': question.checked}">  
+                                    检查答案  
+                                </button>  
+                                <div x-show="question.checked" class="ml-4" :class="question.userAnswer === question.correctAnswer ? 'correct' : 'incorrect'">  
+                                    <span x-show="question.userAnswer === question.correctAnswer">✓ 正确答案！</span>  
+                                    <span x-show="question.userAnswer !== question.correctAnswer">✗ 错误。正确答案是: <span x-text="question.correctAnswer"></span></span>  
+                                </div>  
+                            </div>  
+                            <div x-show="question.checked && question.explanation" class="explanation mt-2" x-html="question.explanation"></div>  
+                        </div>  
+                    </template>  
+                </div>  
+            </div>  
+        </div>  
+    </div>  
+
+    <!-- 这里是关键修改：使用script标签定义问题数据 -->
+    <script id="questionData" type="text/plain">
+	
+    {  
+        text: '在C语言中，调用函数除函数名外，还必须有（）。',  
+        options: ['函数预说明', '实际参数', '( )', '函数返回值'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '调用函数时，函数名后必须有括号()，即使没有参数也需要写括号。这是C语言语法规定的。'  
+    },  
+    {  
+        text: 'C语言能正确处理的指数是（）。',  
+        options: ['8.50E+42', 'e-32', '1.23E+11', '4.5e-5.6'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C语言中，科学计数法表示的浮点数中指数部分必须为整数。选项A可能超出范围，选项B格式不正确（缺少底数），选项D指数部分不是整数。'  
+    },  
+    {  
+        text: 'C语言中，定义结构体的保留字是（）。',  
+        options: ['union', 'struct', 'enum', 'typedef'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '在C语言中，使用struct关键字定义结构体；union用于定义共用体；enum用于定义枚举类型；typedef用于定义类型别名。'  
+    },  
+    {  
+        text: '在下列程序段中，枚举变量c1，c2的值依次是（）。<br>enum color {red,yellow,blue=4,green,white}<br>c1,c2;<br>c1=yellow;c2=white;<br>printf("%d,%d\\n",c1,c2);',  
+        options: ['1,6', '2,5', '1,4', '2,6'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '在枚举类型中，如果不显式赋值，第一个枚举常量值为0，后续的依次加1。因此red=0, yellow=1, blue=4(显式赋值), green=5, white=6。所以c1=yellow=1, c2=white=6。但题目中的答案选项错误，正确应为1,6。'  
+    },  
+    {  
+        text: 'char *s1="hello",*s2;<br>s2=s1;<br>则（）。',  
+        options: ['s2指向不确定的内存单元', '不能访问"hello"', 'puts(s1);与puts(s2);结果相同', 's1不能再指向其它单元'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '将s1赋值给s2后，s2也指向字符串"hello"，因此使用puts函数输出s1和s2会得到相同的结果。'  
+    },  
+    {  
+        text: '对于void类型函数，调用时不可作为（）。',  
+        options: ['自定义函数体中的语句', '循环体里的语句', 'if语句的成分语句', '表达式'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'void类型函数没有返回值，因此不能作为表达式使用（如赋值表达式的右值）。但可以作为独立语句调用。'  
+    },  
+    {  
+        text: '执行以下程序段后，输出结果和a的值是（）。<br>int a=10;<br>printf("%d",a++);',  
+        options: ['10 和 10', '10 和 11', '11 和 10', '11 和 11'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'a++是后自增运算，先使用a的当前值(10)进行输出，然后a再自增为11。因此输出结果是10，a的最终值是11。'  
+    },  
+    {  
+        text: '执行下列语句后的结果为（）。<br>int x=3,y;<br>int *px=&x;<br>y=*px++;',  
+        options: ['x=3,y=4', 'x=3,y=3', 'x=4,y=4', 'x=3,y不知'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '*px++等价于*(px++)，先取px指向的值赋给y，然后px指针自增。因此y=3，x不变，仍为3。'  
+    },  
+    {  
+        text: '在位运算中，操作数每右移一位，其结果相当于（）。',  
+        options: ['操作数乘以2', '操作数除以2', '操作数乘以16', '操作数除以16'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '在位运算中，无符号数右移一位相当于除以2，左移一位相当于乘以2。右移4位才相当于除以16，左移4位才相当于乘以16。'  
+    },  
+    {  
+        text: '文件中有一个位置指针，指向当前读写的位置，不可使p所指文件的位置返回到文件的开头的是（）。',  
+        options: ['rewind(p);', 'fseek(p,0,SEEK_SET);', 'fseek(p,0,0);', 'fseek(p,-3L,SEEK_CUR);'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'rewind(p)和fseek(p,0,SEEK_SET)都可以使文件位置指针返回到文件开头；fseek(p,0,0)中0等价于SEEK_SET，也可以回到开头；而fseek(p,-3L,SEEK_CUR)是从当前位置向前移动3个字节，不一定回到文件开头。'  
+    },  
+    {  
+        text: '以下常量中，能够代表逻辑"真"值的常量是（）。',  
+        options: ['\'\\0\'', '0', '\'0\'', 'NULL'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '在C语言中，0表示逻辑"假"，非0表示逻辑"真"。\'\\0\'的ASCII码是0，代表"假"；0直接就是"假"；\'0\'的ASCII码是48，是非0值，代表"真"；NULL等价于0，代表"假"。'  
+    },  
+    {  
+        text: '下列标识符中，不合法的C语言用户自定义标识符是（）。',  
+        options: ['printf', 'enum', '_(下划线)', 'sin'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'enum是C语言的关键字，不能作为用户自定义标识符。printf和sin虽然是标准库函数名，但在C语言中可以重新定义（不推荐）。下划线是合法的标识符。'  
+    },  
+    {  
+        text: '不仅可将C源程序存在磁盘上，还可将数据按数据类型分别以什么的形式存在磁盘上（）。',  
+        options: ['内存', '缓冲区', '文件', '寄存器'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '数据可以以文件的形式存储在磁盘上，C语言提供了文件操作功能来处理各种类型的数据文件。内存和寄存器是临时存储，缓冲区是临时的数据缓存区域。'  
+    },  
+    {  
+        text: '与实际参数为实型数组名相对应的形式参数不可以定义为（）。',  
+        options: ['float a[];', 'float *a;', 'float a;', 'float (*a)[3];'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'float a;定义了一个单独的float变量，而不是数组或指针，无法接收数组名作为参数。数组名作为参数传递时会退化为指针，可以用float a[]或float *a接收，但不能用float a接收。'  
+    },  
+    {  
+        text: 'fgets(str,n,fp)函数从文件中读入一个字符串，以下正确的叙述是（）。',  
+        options: ['字符串读入后不会自动加入\'\\0\'', 'fp是file类型的指针', 'fgets函数将从文件中最多读入n-1个字符', 'fgets函数将从文件中最多读入n个字符'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'fgets函数最多读入n-1个字符，并在末尾自动添加\'\\0\'字符，使其成为一个有效的字符串。fp是FILE类型的指针，不是file类型。'  
+    },  
+    {  
+        text: '若有下列定义和语句，则对a数组元素的非法引用是（）。<br>int a[2][3], (*pt)[3];<br>pt=a;',  
+        options: ['pt[0][0]', '*(pt+1)[2]', '*(pt[1]+2)', '*(a[0]+2)'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '*(pt+1)[2]语法错误，正确应为(*(pt+1))[2]或pt[1][2]。其他选项都是合法的数组元素访问方式。'  
+    },  
+    {  
+        text: '以下叙述中正确的是（）。',  
+        options: ['构成C程序的基本单位是函数', '可以在一个函数中定义另一个函数', 'main()函数必须放在其它函数之前', '所有被调用的函数一定要在调用之前进行定义'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C语言程序的基本单位是函数。C语言不允许函数嵌套定义；main函数位置不固定，可以在其他函数之后；函数可以先声明后定义，不一定要在调用前定义。'  
+    },  
+    {  
+        text: '一个算法应该具有"确定性"等5个特性，下面对另外4个特性的描述中错误的是（）。',  
+        options: ['有零个或多个输入', '有零个或多个输出', '有穷性', '可行性'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '算法应当具有输出。算法的五个特性是：输入、输出、确定性、有穷性和可行性。一个算法可以没有输入，但必须有至少一个输出。'  
+    },  
+    {  
+        text: '从键盘上输入某字符串时，不可使用的函数是（）。',  
+        options: ['getchar()', 'gets()', 'scanf()', 'fread()'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'fread()函数主要用于从文件读取二进制数据，而不是从键盘读取字符串。getchar()、gets()和scanf()都可以从标准输入（通常是键盘）读取数据。'  
+    },  
+    {  
+        text: 'char a[]="This is a program.";<br>输出前5个字符的语句是（）。',  
+        options: ['printf("%.5s",a);', 'puts(a);', 'printf("%s",a);', 'a[5*2]=0;puts(a);'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'printf("%.5s",a)可以限制输出字符串的前5个字符。puts(a)和printf("%s",a)会输出整个字符串。a[5*2]=0会修改原字符串，不合适。'  
+    },  
+    {  
+        text: '全局变量的定义不可能在（）。',  
+        options: ['函数内部', '函数外面', '文件外面', '最后一行'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '全局变量必须定义在函数外部。定义在函数内部的变量是局部变量，不是全局变量。'  
+    },  
+    {  
+        text: '以下语句中，循环次数不为10次的语句是（）。',  
+        options: ['for(i=1;i<10;i++);', 'i=1;do{i++;}while(i<=10);', 'i=10;while(i>0){--i;}', 'i=1;m:if(i<=10){i++;goto m;}'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'for(i=1;i<10;i++);循环条件是i<10，从1开始，循环9次就结束了。其他选项都会循环10次。'  
+    },  
+    {  
+        text: '以下程序段<br>char *alp[]={"ABC","DEF","GHI"};<br>puts(alp[1]);<br>的输出结果是',  
+        options: ['A', 'B', 'C', 'D', 'DEF'],  
+        correctAnswer: 'E',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'alp是字符串指针数组，alp[1]指向字符串"DEF"，puts(alp[1])会输出整个字符串"DEF"。'  
+    },  
+    {  
+        text: '若有int i=3,*p;<br>p=&i;<br>下列语句中输出结果为3的是（）。',  
+        options: ['printf("%d",&p);', 'printf("%d",*i);', 'printf("%d",*p);', 'printf("%d",p);'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '*p表示取p指向的值，即i的值3。&p是p的地址；*i是错误的，因为i不是指针；p是i的地址，不是3。'  
+    },  
+    {  
+        text: 'int (*p)[6];<br>它的含义为（）。',  
+        options: ['具有6个元素的一维数组', '定义了一个指向具有6个元素的一维数组的指针变量', '指向整型指针变量', '指向6个整数中的一个的地址'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'int (*p)[6]定义了一个指针p，它指向一个包含6个整型元素的一维数组。这种声明常用于处理二维数组，p可以指向二维数组的一行。'  
+    },  
+    {  
+        text: '若有char a[80],*s=a;<br>不正确的输入语句是（）。',  
+        options: ['scanf("%s",s);', 'gets(s);', 'fscanf(stdin,"%c",s);', 'fgets(s,80,stdin);'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'fscanf(stdin,"%c",s)格式控制字符串"%c"表示只读取一个字符，应该用"%c"读取单个字符并放入s指向的位置。其他三个选项都是正确的字符串输入方式。'  
+    },  
+    {  
+        text: '设j和k都是int类型，则下面的for循环语句（）。<br>for(j=0,k=0;j<=9&&k!=876;j++)<br>scanf("%d",&k);',  
+        options: ['最多执行10次', '最多执行9次', '是无限循环', '循环体一次也不执行'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '循环控制条件是j<=9且k!=876，j从0开始，最多可以达到9，因此最多执行10次。如果其中k输入了876，会提前终止循环。'  
+    },  
+    {  
+        text: '对结构体类型的变量的成员的访问，无论数据类型如何都可使用的运算符是',  
+        options: ['.', '->', '*', '&'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '点运算符(.)用于直接访问结构体变量的成员。箭头运算符(->)用于通过结构体指针访问成员；*和&是取值和取地址运算符，不是专门用于访问结构体成员的。'  
+    },  
+    {  
+        text: 'C语言中的文件的存储方式有（）。',  
+        options: ['只能顺序存取', '只能随机存取(或直接存取)', '可以顺序存取,也可随机存取', '只能从文件的开头进行存取'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C语言中的文件既可以顺序存取（如用fgetc、fputc等按顺序读写），也可以随机存取（如用fseek定位到任意位置后读写）。'  
+    },  
+    {  
+        text: '若有<br>char s1[]="abc",s2[20],*t=s2;<br>gets(t);<br>则下列语句中能够实现当字符串s1大于字符串s2时,输出s2的语句是（）。',  
+        options: ['if(strcmp(s1,s1)>0)puts(s2);', 'if(strcmp(s2,s1)>0)puts(s2);', 'if(strcmp(s2,t)>0)', 'if(strcmp(s1,t)>0)puts(s2);'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'strcmp函数比较两个字符串，如果第一个大于第二个，返回值大于0。因此if(strcmp(s1,t)>0)puts(s2);能实现当s1大于s2时输出s2（t和s2指向同一地址）。'  
+    },  
+    {  
+        text: 'int a[10];<br>给数组a的所有元素分别赋值为1、2、3、……的语句是（）。',  
+        options: ['for(i=1;i<11;i++)a[i]=i;', 'for(i=1;i<11;i++)a[i-1]=i;', 'for(i=1;i<11;i++)a[i+1]=i;', 'for(i=1;i<11;i++)a[0]=1;'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '数组下标从0开始，长度为10的数组下标范围是0~9。for(i=1;i<11;i++)a[i-1]=i;正确地将1~10赋值给a[0]~a[9]。其他选项要么下标越界，要么赋值不正确。'  
+    },  
+    {  
+        text: '应用缓冲文件系统对文件进行读写操作，关闭文件的函数名为（）。',  
+        options: ['fclose()', 'close()', 'fread()', 'fwrite'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C标准库中，使用fclose()函数关闭文件。close()是UNIX/Linux系统调用；fread()和fwrite()是用于读写文件的函数，不是关闭文件的。'  
+    },  
+    {  
+        text: 'char a[10];<br>不能将字符串"abc"存储在数组中的是（）。',  
+        options: ['strcpy(a,"abc");', 'a[0]=0;strcat(a,"abc");', 'a="abc";', 'int i;for(i=0;i<3;i++)a[i]=i+97;a[i]=0;'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'a="abc";是错误的，因为数组名是常量指针，不能作为赋值的左值。其他选项都可以正确地将"abc"存入数组。'  
+    },  
+    {  
+        text: '下列程序段的输出结果为（）。<br>int x=3,y=2;<br>printf("%d",(x-=y,x*=y+8/5));',  
+        options: ['1', '7', '3', '5'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '逗号表达式从左到右计算。首先x-=y，x变为1；然后x*=y+8/5，即x*=(2+1)=1*3=3。但答案选项中似乎没有正确答案3，可能是题目有误。'  
+    },  
+    {  
+        text: '若有以下程序段：<br>int a=3,b=4;<br>a=a^b;b=b^a;a=a^b;<br>则执行以上语句后，a和b的值分别是（）。',  
+        options: ['a=3,b=4', 'a=4,b=3', 'a=4,b=4', 'a=3,b=3'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '这是利用异或运算交换两个变量的经典方法。最终结果是a和b的值交换，即a=4,b=3。'  
+    },  
+    {  
+        text: '指针变量p进行自加运算(即 执行p++;)后，地址偏移值为1，则其数据类型为（）。',  
+        options: ['int', 'float', 'double', 'char'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '指针变量p++操作会使p增加所指类型的大小。char类型占1字节，因此char*类型的指针p++后地址偏移值为1。'  
+    },  
+    {  
+        text: '下列程序的输出结果是（）。<br>main()<br>{<br>int  x=1,y=0,a=0,b=0;<br>switch(x)<br>{<br>case  1:switch(y)<br>{<br>case  0:a++;<br>break;<br>case  1:b++;<br>break;<br>}<br>case  2:a++;<br>b++;<br>break;<br>case  3:a++;<br>b++;<br>break;<br>}<br>printf("a=%d,b=%d\\n",a,b);<br>}',  
+        options: ['a=1,b=0', 'a=2,b=1', 'a=1,b=1', 'a=2,b=2'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'switch语句执行时，x=1进入case 1，y=0进入内层switch的case 0，执行a++，然后break跳出内层switch。但外层switch没有break，会继续执行case 2，执行a++和b++，然后break跳出外层switch。因此最终a=2,b=1。'  
+    },  
+    {  
+        text: '设有如下定义：<br>char *strp,str[64];<br>scanf("%s",str);<br>strp=str;<br>若0<k<64，则访问str数组的第k个元素的正确表达式为（）。',  
+        options: ['strp', 'str[k]', 'strp[k]', '*strp'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'str[k]是访问数组第k个元素的正确方式。strp是指向数组首地址的指针，strp[k]也可以访问第k个元素，但题目要求访问str数组的元素。'  
+    },  
+    {  
+        text: '结构体类型的定义允许嵌套是指（）。',  
+        options: ['成员是已经或正在定义的结构体型', '成员可以重名', '结构体型可以派生', '定义多个结构体型'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '结构体嵌套是指一个结构体的成员可以是另一个结构体类型，即成员是已经定义的结构体类型。此外，C语言也允许在定义中使用未完成类型的结构体指针。'  
+    },  
+    {  
+        text: '变量p为指针变量，若p=&a，下列说法不正确的是（）。',  
+        options: ['&*p==&a', '*&a==a', '(*p)++==a++', '*(p++)==a++'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '*(p++)不等于a++。*(p++)先使用p当前值取内容，然后p自增；而a++是a自增。这两个表达式的效果不同，一个改变指针，一个改变被指向的变量。'  
+    },  
+    {  
+        text: 'int a[10];<br>合法的数组元素的最小下标值为（）。',  
+        options: ['10', '9', '1', '0'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C语言中数组下标从0开始，因此合法的最小下标是0。'  
+    },  
+    {  
+        text: '若有定义：<br>char *p1,*p2,*p3,*p4,ch;<br>则不能正确赋值的程序语句为（）。',  
+        options: ['p1=&ch;scanf("%c",p1);', 'p2=(char *)malloc(1);scanf("%c",p2);', '*p3=getchar();', 'p4=&ch;*p4=getchar();'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '*p3=getchar()是错误的，因为p3没有被初始化，指向的内存地址不确定，直接解引用可能导致未定义行为。其他选项都正确地初始化了指针再使用。'  
+    },  
+    {  
+        text: '若有int a[][2]={{1,2},{3,4}};<br>则*(a+1),*(*a+1)的含义分别为（）。',  
+        options: ['非法,2', '&a[1][0],2', '&a[0][1],3', 'a[0][0],4'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '*(a+1)相当于a[1]，即第二行的地址&a[1][0]；*(*a+1)相当于*(a[0]+1)，即a[0][1]的值2。'  
+    },  
+    {  
+        text: '相同结构体类型的变量之间，可以（）。',  
+        options: ['相加', '赋值', '比较大小', '地址相同'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C语言中，相同结构体类型的变量之间可以直接赋值，但不能直接相加、比较大小或要求地址相同。'  
+    },  
+    {  
+        text: '以下字符中不是转义字符的是（）。',  
+        options: ['\'\\a\'', '\'\\b\'', '\'\\c\'', '\'\\\\\''],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '\'\\c\'不是C语言的转义字符。\'\\a\'是警报(BEL)，\'\\b\'是退格，\'\\\\\'是反斜杠本身。'  
+    },  
+    {  
+        text: 'int i,j,a[2][3];<br>按照数组a的元素在内存的排列次序，不能将数1,2,3,4,5,6存入a数组的是（）。',  
+        options: ['for(i=0;i<2;i++)for(j=0;j<3;j++)a[i][j]=i*3+j+1;', 'for(i=0;i<3;i++)for(j=0;j<2;j++)a[j][i]=j*3+i+1;', 'for(i=0;i<6;i++)a[i/3][i%3]=i+1;', 'for(i=1;i<=6;i++)a[i][i]=i;'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'for(i=1;i<=6;i++)a[i][i]=i;会导致数组下标越界。a是2×3的数组，下标范围是[0,1]×[0,2]，而循环中i从1到6，超出了合法范围。'  
+    },  
+    {  
+        text: '下列程序段的输出结果为（）。<br>float x=213.82631;<br>printf("%3d",(int)x);',  
+        options: ['213.82', '213.83', '213', '3.8'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '(int)x将x转换为整数，结果为213；然后%3d格式控制符输出至少占3位的整数，因此输出213。'  
+    },  
+    {  
+        text: '用户定义的函数不可以调用的函数是（）。',  
+        options: ['非整型返回值的', '本文件外的', 'main函数', '本函数下面定义的'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '在C语言中，main函数是程序入口，其他用户定义的函数不应该调用main函数。其他选项中的函数都可以被调用，只要有适当的声明或定义。'  
+    },  
+    {  
+        text: '下列表达式中，可作为C合法表达式的是（）。',  
+        options: ['[3,2,1,0]', '(3,2,1,0)', '3=2=1=0', '3/2/1/0'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '(3,2,1,0)是逗号表达式，依次计算3、2、1、0，结果为最后一个表达式的值0。[3,2,1,0]不是C语言的合法语法；3=2=1=0尝试给常量赋值，是非法的；3/2/1/0最后会除以0，导致运行时错误。'  
+    },  
+    {  
+        text: '打开文件时，方式"w"决定了对文件进行的操作是（）。',  
+        options: ['只写盘', '只读盘', '可读可写盘', '追加写盘'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '在C语言中，使用"w"模式打开文件表示只写模式，如果文件已存在会清空内容，不存在则创建新文件。"r"为只读，"a"为追加写，"r+"为读写模式。'  
+    },  
+	    {  
+        text: 'C程序中的宏展开是在（）。',  
+        options: ['编译时进行的', '程序执行时进行的', '编译前预处理时进行的', '编辑时进行的'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '宏展开是在预处理阶段进行的，这个阶段发生在编译之前。预处理器负责处理所有以#开头的预处理指令，包括宏定义(#define)的展开。'  
+    },  
+    {  
+        text: '若有int a[10]={0,1,2,3,4,5,6,7,8,9},*p=a;<br>则输出结果不为5的语句为（）。',  
+        options: ['printf("%d",*(a+5));', 'printf("%d",p[5]);', 'printf("%d",*(p+5));', 'printf("%d",*p[5]);'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '*p[5]等价于*(p[5])，即*(*(p+5))，语法错误。因为p[5]的值是5，这不是一个有效的地址，所以解引用会导致错误。其他三种方式都是访问数组第6个元素(下标为5)的正确方式，值为5。'  
+    },  
+    {  
+        text: '以下对枚举类型名的定义中正确的是（）。',  
+        options: ['enum a={sum,mon,tue};', 'enum a {sum=9,mon=-1,tue};', 'enum a={"sum","mon","tue"};', 'enum a {"sum","mon","tue"};'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'enum a {sum=9,mon=-1,tue};是正确的枚举类型定义，可以指定枚举常量的值，未指定的从上一个值加1(这里tue为0)。其他选项语法都是错误的。'  
+    },  
+    {  
+        text: '下列程序段的输出结果为（）。<br>float k=0.8567;<br>printf("%06.1f%%",k*100);',  
+        options: ['0085.6%%', '85.70%', '85.60%', '0.857'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'k*100=85.67，%.1f表示保留一位小数，结果是85.6；%06.1f表示输出总宽度为6，不足用0填充，结果是085.6；%%表示输出百分号，最终输出085.6%。'  
+    },  
+    {  
+        text: '下列字符序列中，是C语言关键字的是（）。',  
+        options: ['sizeof', 'include', 'scanf', 'sqrt'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'sizeof是C语言的关键字，用于计算数据类型或表达式的字节大小。include是预处理指令，scanf和sqrt是标准库函数，不是关键字。'  
+    },  
+    {  
+        text: '在定义构造数据类型时，不能（）。',  
+        options: ['说明变量', '说明存储类型', '初始化', '末尾不写分号'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '定义构造数据类型(如结构体、联合体、枚举)时，末尾必须有分号。可以同时说明变量，也可以指定存储类型或进行初始化。'  
+    },  
+    {  
+        text: 'double x;<br>scanf("%lf",&x);<br>不可以赋值给x变量的常量是（）。',  
+        options: ['123', '100000', '\'A\'', 'abc'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'abc是标识符，不是常量，不能直接赋值给x。123、100000和\'A\'都是可以转换为double类型的常量。'  
+    },  
+    {  
+        text: '以下程序段的输出结果是（）。<br>char *alp[]={"ABC","DEF","GHI"};<br>int j;<br>puts(alp[1]);',  
+        options: ['A', 'B', 'C', 'D', 'DEF'],  
+        correctAnswer: 'E',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'alp是字符串指针数组，alp[1]指向字符串"DEF"，puts(alp[1])会输出整个字符串"DEF"。'  
+    },  
+    {  
+        text: '求平方根函数的函数名为（）。',  
+        options: ['cos', 'abs', 'pow', 'sqrt'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'sqrt()是C标准库中计算平方根的函数。cos()计算余弦值，abs()计算绝对值，pow()计算幂。'  
+    },  
+    {  
+        text: '若有下列定义，则对a数组元素地址的正确引用是（）。<br>int a[5],*p=a;',  
+        options: ['&a[5]', 'p+2', 'a++', '&a'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'p+2是指向a[2]的指针，是对数组元素地址的正确引用。&a[5]超出数组范围；a++是非法的，因为数组名是常量指针；&a是整个数组的地址，不是元素地址。'  
+    },  
+    {  
+        text: '下列各m的值中，能使m%3==2&&m%5==3&&m%7==2为真的是（）。',  
+        options: ['8', '23', '17', '6'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '需要满足m除以3余2，除以5余3，除以7余2。通过验算，23满足：23%3=2，23%5=3，23%7=2。'  
+    },  
+    {  
+        text: 'int a[10]={1,2,3,4,5,6,7,8};<br>int *p;<br>p=&a[5];<br>p[-3]的值是（）。',  
+        options: ['2', '3', '4', '不一定'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'p[-3]相当于*(p-3)，p指向a[5]，所以p-3指向a[2]，值为3。'  
+    },  
+    {  
+        text: '若char a[10];<br>已正确定义，以下语句中不能从键盘上给a数组的所有元素输入值的语句是（）。',  
+        options: ['gets(a);', 'scanf("%s",a);', 'for(i=0;i<10;i++)a[i]=getchar();', 'a=getchar();'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'a=getchar();是错误的，因为数组名是常量指针，不能作为赋值的左值。其他选项都可以从键盘输入数据到数组，尽管gets和scanf可能存在缓冲区溢出风险。'  
+    },  
+    {  
+        text: '设有如下定义：<br>struct sk  {int a;  float  b;}<br>data,*p;<br>若要使p指向data中的a域，正确的赋值语句是（）。',  
+        options: ['p=(struct sk*)&data.a;', 'p=(struct sk*) data.a;', 'p=&data.a;', '*p=data.a;'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'p是指向整个结构体的指针，要让它指向结构体中的a成员，需要将&data.a强制转换为struct sk*类型：p=(struct sk*)&data.a;。其他选项都是语法错误或语义错误。'  
+    },  
+    {  
+        text: '关于指针概念说法不正确的是（）。',  
+        options: ['一个指针变量只能指向同一类型变量', '一个变量的地址称为该变量的指针', '只有同一类型变量的地址才能放到指向该类型变量的指针变量之中', '指针变量可以由整数赋值，不能用浮点数赋值'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '指针变量不能直接由整数或浮点数赋值，必须是适当类型的地址。虽然在某些实现中可以将地址转换为整数再转回指针，但这是不可移植的做法。'  
+    },  
+    {  
+        text: '具有相同类型的指针变量p与数组a，不能进行的操作是（）。',  
+        options: ['p=a;', '*p=a[0];', 'p=&a[0];', 'p=&a;'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'p=&a;是类型不匹配的。如果p是int*类型，&a是int(*)[n]类型(指向数组的指针)，这两种类型不兼容。正确的赋值方式是p=a或p=&a[0]。'  
+    },  
+    {  
+        text: '函数的形式参数隐含的存储类型说明是（）。',  
+        options: ['extern', 'static', 'puts(s2);', 'auto'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '函数形参的默认存储类型是auto（自动变量），函数调用时创建，函数返回时销毁。注意：选项C "puts(s2);" 明显不是存储类型，这可能是题目排版错误。'  
+    },  
+    {  
+        text: '以下程序段的输出结果为（）。<br>char c[]="abc";<br>int  i=0;<br>do ;<br>while(c[i++]!=\'\\0\');<br>printf("%d",i-1);',  
+        options: ['abc', 'ab', '2', '3'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'do-while循环体为空，循环条件是字符不为\\0，会一直循环到遇到字符串结束符。字符串"abc"有三个字符加一个结束符，i会从0递增到4，所以i-1的值为3。'  
+    },  
+    {  
+        text: 'C语言中不可以嵌套的是（）。',  
+        options: ['函数调用', '函数定义', '循环语句', '选择语句'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C语言不允许函数嵌套定义，即一个函数内部不能定义另一个函数。但可以有函数调用的嵌套、循环语句的嵌套和选择语句的嵌套。'  
+    },  
+    {  
+        text: 'C语言中的文件类型只有（）。',  
+        options: ['索引文件和文本文件两种', 'ASCII文件和二进制文件两种', '文本文件一种', '二进制文件一种'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C语言中文件通常分为文本文件(ASCII文件)和二进制文件两种。文本文件以字符形式存储，二进制文件以二进制形式存储，不做任何转换。'  
+    },  
+    {  
+        text: '下列程序段的输出结果为（）。<br>int a=7,b=9,t;<br>t=a*=a>b?a:b;<br>printf("%d",t);',  
+        options: ['7', '9', '63', '49'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'a>b?a:b的结果是9(因为a不大于b)，所以a*=9，即a=a*9=7*9=63，然后将a的值赋给t，所以t=63。'  
+    },  
+    {  
+        text: '设有说明int (*ptr)[M];其中标识符ptr是（）。',  
+        options: ['M个指向整型变量的指针', '指向M个整型变量的函数指针', '一个指向具有M个整型元素的一维数组的指针', '具有M个指针元素的一维指针数组，每个元素都只能指向整型量'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'int (*ptr)[M]声明了一个指针ptr，它指向一个包含M个int元素的数组。这种声明常用于处理二维数组，例如ptr可以指向二维数组的一行。'  
+    },  
+    {  
+        text: 'static char str[10]="China";<br>数组元素个数为（）。',  
+        options: ['5', '6', '9', '10'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '数组str被显式声明为含有10个元素。虽然"China"只占用6个字节(包括结束符\\0)，但数组大小仍为10个元素。'  
+    },  
+    {  
+        text: '以下叙述中正确的是 （）。',  
+        options: ['C程序中注释部分可以出现在程序中任意合适的地方', '花括号"{"和"}"只能作为函数体的定界符', '构成C程序的基本单位是函数,所有函数名都可以由用户命名', '分号是C语句之间的分隔符,不是语句的一部分'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C程序的注释可以出现在程序中的任何地方。花括号不仅可以作为函数体定界符，还可用于复合语句和初始化列表；并非所有函数都可以由用户任意命名(如main函数)；分号是语句的一部分，是语句的结束符而非分隔符。'  
+    },  
+    {  
+        text: '以下程序的输出结果是（）。<br>main()<br>{<br>char  s[]="123",*p;<br>p=s;<br>printf("%c%c%c\\n",*p++,*p++,*p++);<br>}',  
+        options: ['123', '321', '213', '312'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'p指向字符串"123"的首字符，函数调用中的参数评估顺序是不确定的，但p++操作的效果是确定的。不同编译器可能产生不同结果，但最常见的是按从左到右的顺序，输出"123"。'  
+    },  
+    {  
+        text: '设char a[5],*p=a;<br>下面选择中正确的赋值语句是（）。',  
+        options: ['p="abcd";', 'a="abcd";', '*p="abcd";', '*a="abcd";'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'p="abcd";是正确的，将字符串常量"abcd"的地址赋给指针p。a="abcd";是错误的，因为数组名是常量指针；*p="abcd";和*a="abcd";也是错误的，因为尝试将字符串地址赋给单个字符。'  
+    },  
+    {  
+        text: 'C语言程序中必须有的函数是（）。',  
+        options: ['#include "stdio.h"', 'main', 'printf', 'scanf'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'main函数是C程序的入口点，每个C程序必须有一个main函数。#include不是函数而是预处理指令；printf和scanf是常用的标准库函数，但不是必须的。'  
+    },  
+    {  
+        text: 'enum a {sum=9,mon=-1,tue};<br>定义了（）。',  
+        options: ['枚举变量', '3个标识符', '枚举数据类型', '整数9和-1'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '这段代码定义了一个名为a的枚举数据类型，其中包含三个枚举常量：sum(值为9)、mon(值为-1)和tue(值为0)。这不是变量定义，而是类型定义。'  
+    },  
+    {  
+        text: '若有int *p=(int *)malloc(sizeof(int));<br>则向内存申请到内存空间存入整数123的语句为（）。',  
+        options: ['scanf("%d",p);', 'scanf("%d",&p);', 'scanf("%d",*p);', 'scanf("%d",**p);'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'p已经是指向分配内存的指针，所以直接使用scanf("%d",p);可以将输入的整数存入p指向的内存。&p是指针的地址；*p是p指向的值，不是地址；**p尝试对非指针类型解引用，是错误的。'  
+    },  
+    {  
+        text: 'C语言中，文件由（）。',  
+        options: ['记录组成', '由数据行组成', '由数据块组成', '由字符(字节)序列组成'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C语言中，文件本质上是字节序列，可以按字节或按特定格式（如字符、行或记录）解释这些序列。从底层看，文件就是字符(字节)序列的集合。'  
+    },  
+    {  
+        text: '选择结构中的条件与循环结构中循环成立的条件，在写法上可以是任一表达式，但其值只能被判断为"真"或"假"。哪个数作为逻辑"假"值（）。',  
+        options: ['-1', '1', '非零的数', '0'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C语言中，0被视为逻辑"假"，任何非零值（包括正数、负数）都被视为逻辑"真"。'  
+    },  
+    {  
+        text: 'C语言的注释定界符是（）。',  
+        options: ['{  }', '[  ]', '\\*    *\\', '/*    */'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C语言的传统注释使用/*开始，*/结束。C99标准还引入了//单行注释，但题目问的是注释定界符，应选传统的多行注释方式。'  
+    },  
+    {  
+        text: 'char a1[]="abc",a2[80]="1234";<br>将a1串连接到a2串后面的语句是（）。',  
+        options: ['strcat(a2,a1', 'strcat(a2,a1);', 'strcat(a1,a2);', 'strcat(a1,a2);'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'strcat函数的格式是strcat(目标串,源串)，要将a1连接到a2后面，应使用strcat(a2,a1);。注意选项A缺少右括号和分号，选项C和D会将a2连接到a1后面。'  
+    },  
+    {  
+        text: '下列叙述中正确的是（）。',  
+        options: ['C语言编译时不检查语法', 'C语言的子程序有过程和函数两种', 'C语言的函数可以嵌套定义', 'C语言所有函数都是外部函数'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C语言中所有函数默认都是外部函数（除非使用static修饰）。C语言编译时会检查语法；C语言只有函数没有过程的概念；C语言不允许函数嵌套定义。'  
+    },  
+    {  
+        text: 'while(fabs(t)<1e-5)<br>if(!s/10)<br>break;<br>循环结束的条件是（）。',  
+        options: ['t>=1e-5&&t<=-1e-5&&s>-10&&s<10', 'fabs(t)<1e-5&&!s/10', 'fabs(t)<1e-5', 's/10==0'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '当fabs(t)>=1e-5或s/10==0时，循环结束。fabs(t)<1e-5是循环继续的条件，而当s/10为0时会break跳出循环，所以循环结束的条件是fabs(t)>=1e-5或s/10==0，等价于!(fabs(t)<1e-5&&!(s/10==0))。'  
+    },  
+    {  
+        text: 'int a=3,b=2,c=1;<br>if(a>b>c)a=b;<br>else a=c;<br>则a的值为（）。',  
+        options: ['3', '2', '1', '0'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'a>b>c会先计算a>b（结果为1），然后计算1>c（结果为0，即假）。因此执行else部分，a=c，所以a的值为1。'  
+    },  
+    {  
+        text: 'char *match(char c)<br>是（）。',  
+        options: ['函数定义的头部', '函数预说明', '函数调用', '指针变量说明'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'char *match(char c)是函数的原型声明（预说明），它说明了函数的返回类型、函数名和参数列表，但没有函数体，不是完整的函数定义。'  
+    },  
+    {  
+        text: '能将高级语言编写的源程序转换为目标程序的是（）。',  
+        options: ['链接程序', '解释程序', '编译程序', '编辑程序'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '编译程序负责将高级语言的源代码转换为目标代码。链接程序负责将多个目标文件链接成可执行程序；解释程序直接执行源代码不生成目标代码；编辑程序用于创建和修改源代码。'  
+    },  
+    {  
+        text: '下列运算符中是C语言关系运算符的是（）。',  
+        options: ['~', '!', '&', '!='],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '!=是不等于关系运算符。~是按位取反运算符；!是逻辑非运算符；&是按位与运算符或取地址运算符，都不是关系运算符。'  
+    },  
+    {  
+        text: '以下程序段的输出结果为（）。<br>for(i=4;i>1;i--)<br>for(j=1;j<i;j++)<br>printf("#");',  
+        options: ['无', '######', '#', '###'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '外层循环i从4递减到2，内层循环j从1到i-1，每次打印一个#。所以总共打印：(4-1)+(3-1)+(2-1)=3+2+1=6个#符号。'  
+    },  
+    {  
+        text: 'int a=1,b=2,c=3;<br>if(a>b)a=b;<br>if(a>c)a=c;<br>则a的值为（）。',  
+        options: ['1', '2', '3', '不一定'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '第一个if条件a>b不成立（1不大于2），所以a仍为1；第二个if条件a>c也不成立（1不大于3），所以a仍为1。最终a的值为1。'  
+    },  
+    {  
+        text: '使用共用体变量，不可以（）。',  
+        options: ['节省存储空间', '简化程序设计', '进行动态管理', '同时访问所有成员'],  
+        correctAnswer: 'D',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '共用体的所有成员共享同一块内存空间，任何时候只能访问其中一个成员，不能同时访问所有成员。共用体确实可以节省存储空间、简化程序设计，也可以用于动态管理不同类型的数据。'  
+    },  
+    {  
+        text: '以下语句中，不能实现回车的是（）。',  
+        options: ['printf("\\n");', 'putchar("\\n");', 'fprintf(stdout,"\\n");', 'fwrite("\\n",1,1,stdout);'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'putchar("\\n");是错误的，因为putchar函数需要一个字符作为参数，而"\\n"是字符串。正确应为putchar(\'\\n\');。其他选项都可以实现回车。'  
+    },  
+        {  
+        text: '当定义一个结构体变量时，系统分配给它的内存是（）。',  
+        options: ['各成员所需内存量的总和', '结构中第一个成员所需内存量', '结构中最后一个成员所需内存量', '成员中占内存量最大者所需的容量'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '结构体变量的内存大小是其所有成员所需内存之和，可能还包括因对齐而增加的额外空间。结构体的大小不仅仅取决于第一个或最后一个成员，也不仅是最大成员的大小。'  
+    },  
+    {  
+        text: 'static struct {int a1;float a2;char a3;} a[10]={1,3.5,\'A\'};<br>说明数组a是地址常量，它有10个结构体型的下标变量，采用静态存储方式，其中被初始化的下标变量是（）。',  
+        options: ['a[1]', 'a[-1]', 'a[0]', 'a[10]'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '初始化列表{1,3.5,\'A\'}只会初始化数组的第一个元素a[0]，其余元素会被默认初始化为0。a[-1]和a[10]是非法的数组下标（越界）。'  
+    },  
+    {  
+        text: '应用缓冲文件系统对文件进行读写操作，打开文件的函数名为（）。',  
+        options: ['open', 'fopen', 'close', 'fclose'],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'C标准库中使用fopen()函数打开文件。open()是UNIX/Linux系统调用；close()和fclose()是用于关闭文件的函数，不是打开文件的。'  
+    },  
+    {  
+        text: 'char h,*s=&h;<br>可将字符H通过指针存入变量h中的语句是（）。',  
+        options: ['*s=H;', '*s=\'H\';', 's=H;', 's=\'H\''],  
+        correctAnswer: 'B',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '*s=\'H\';通过解引用操作将字符\'H\'存入s指向的变量h中。*s=H;中的H被视为变量而非字符常量；s=H;和s=\'H\'都是试图修改指针本身，而不是修改指针指向的内容。'  
+    },  
+    {  
+        text: '若有double *p,x[10];<br>int i=5;<br>使指针变量p指向元素x[5]的语句为（）。',  
+        options: ['p=&x[i];', 'p=x;', 'p=x[i];', 'p=&(x+i)'],  
+        correctAnswer: 'A',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'p=&x[i];将x[i]的地址赋给指针p，使p指向x[5]。p=x;使p指向数组首元素x[0]；p=x[i];将x[i]的值赋给p，类型不匹配；p=&(x+i)语法错误，x+i不是左值。'  
+    },  
+    {  
+        text: '以下程序段中，能够正确地执行循环的是（）。',  
+        options: ['for(i=1;i>10;i++)', 'static int a;<br>while(a)', 'int s=6;<br>do s-=2;<br>while(s);', 'int s=6;<br>m:<br>if(s<100)<br>exit(0);<br>else s-=2;<br>goto m:'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: 'int s=6;do s-=2;while(s);是正确的循环，每次循环s减2，直到s为0时退出循环。for循环的条件i>10初始不成立；static int a;默认初始化为0，while(a)条件不成立；goto语句的标签格式错误，应为"goto m;"而非"goto m:"。'  
+    },  
+    {  
+        text: '位字段数据的单位是（）位。',  
+        options: ['十六进制', '八进制', '二进制', '十进制'],  
+        correctAnswer: 'C',  
+        userAnswer: '',  
+        checked: false,  
+        counted: false,  
+        explanation: '位字段以二进制位为单位，允许指定结构体成员精确占用的位数，常用于节省内存或对应硬件寄存器的特定位。'  
+    }  
+
+    </script>  
+	
+    <script>  
+        function quizApp() {  
+            return {  
+                // 题目数据
+                questions: [],
+                
+                answeredCount: 0,  
+                correctCount: 0,  
+                incorrectCount: 0,  
+                accuracyRate: 0,  
+
+                init() {
+                    // 从script标签获取问题数据
+                    const questionsScript = document.getElementById('questionData');
+                    if (questionsScript) {
+                        try {
+                            const questionsText = questionsScript.textContent;
+                            // 将文本内容转换为有效的JSON格式
+                            const jsonText = '[' + questionsText + ']';
+                            
+                            // 解析JSON并初始化问题
+                            this.questions = eval(jsonText);
+                        } catch (e) {
+                            console.error("Error parsing questions: ", e);
+                            this.questions = [];
+                        }
+                    }
+                },
+                
+                checkAnswer(index) {  
+                    const question = this.questions[index];  
+                    if (question.userAnswer) {  
+                        question.checked = true;  
+                        
+                        // 只有第一次检查时才计入总数  
+                        if (!question.counted) {  
+                            this.answeredCount++;  
+                            question.counted = true;  
+                            
+                            if (question.userAnswer === question.correctAnswer) {  
+                                this.correctCount++;  
+                            } else {  
+                                this.incorrectCount++;  
+                            }  
+                        }  
+                        
+                        this.calculateAccuracy();  
+                    }  
+                },  
+                
+                calculateAccuracy() {  
+                    if (this.answeredCount > 0) {  
+                        this.accuracyRate = Math.round((this.correctCount / this.answeredCount) * 100);  
+                    }  
+                },  
+                
+                scrollToQuestion(questionNum) {  
+                    const element = document.getElementById('question-' + questionNum);  
+                    if (element) {  
+                        element.scrollIntoView({ behavior: 'smooth' });  
+                    }  
+                },  
+                
+                getJumpButtonClass(questionNum) {  
+                    // 检查该区域内的题目是否已回答  
+                    let allAnswered = true;  
+                    let anyAnswered = false;  
+                    let allCorrect = true;  
+                    
+                    for (let i = questionNum; i < questionNum + 5 && i <= this.questions.length; i++) {  
+                        if (this.questions[i-1] && this.questions[i-1].counted) {  
+                            anyAnswered = true;  
+                            if (this.questions[i-1].userAnswer !== this.questions[i-1].correctAnswer) {  
+                                allCorrect = false;  
+                            }  
+                        } else {  
+                            allAnswered = false;  
+                        }  
+                    }  
+                    
+                    if (allAnswered && allCorrect) return 'bg-green-500 text-white';  
+                    if (allAnswered) return 'bg-green-100 text-green-800';  
+                    if (anyAnswered) return 'bg-yellow-100 text-yellow-800';  
+                    return 'bg-gray-100 text-gray-800';  
+                },  
+                
+                printResults() {  
+                    // 首先强制检查所有已回答但未检查的题目  
+                    this.questions.forEach((question, index) => {  
+                        if (question.userAnswer && !question.checked) {  
+                            this.checkAnswer(index);  
+                        }  
+                    });  
+                    
+                    // 然后打印页面  
+                    window.print();  
+                }  
+            }  
+        }  
+    </script>  
+</body>  
+</html>

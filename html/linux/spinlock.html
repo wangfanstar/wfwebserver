@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Linux同步原语对比 - 自旋锁</title>
+    <link rel="stylesheet" href="../tailwind.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 0;
+            display: flex;
+        }
+        .sidebar {
+            width: 250px;
+            background-color: #2c3e50;
+            color: white;
+            height: 100vh;
+            position: fixed;
+            overflow-y: auto;
+        }
+        .content {
+            margin-left: 250px;
+            padding: 20px;
+            width: calc(100% - 250px);
+        }
+        .sidebar-header {
+            padding: 20px;
+            text-align: center;
+            border-bottom: 1px solid #34495e;
+        }
+        .nav-link {
+            display: block;
+            padding: 15px 20px;
+            color: #ecf0f1;
+            text-decoration: none;
+            transition: background-color 0.3s;
+        }
+        .nav-link:hover {
+            background-color: #34495e;
+        }
+        .active {
+            background-color: #3498db;
+        }
+        .card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .card-header {
+            background-color: #3498db;
+            color: white;
+            padding: 15px 20px;
+            font-weight: bold;
+        }
+        .card-body {
+            padding: 20px;
+        }
+        .note-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #e74c3c;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        code {
+            background-color: #f8f9fa;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        .code-block {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 4px;
+            font-family: 'Courier New', Courier, monospace;
+            white-space: pre;
+            overflow-x: auto;
+            line-height: 1.5;
+            margin: 15px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="sidebar">
+        <div class="sidebar-header">  
+    <a href="./linux_sync_short.html" class="block">  
+        <h2 class="text-xl font-bold hover:text-blue-600 transition-colors">Linux同步原语简要版</h2>  
+    </a>  
+</div>
+        <nav>
+            <a href="linux_sync.html" class="nav-link">首页</a>
+            <a href="mutex.html" class="nav-link">互斥锁 (Mutex)</a>
+            <a href="rwlock.html" class="nav-link">读写锁 (RWLock)</a>
+            <a href="spinlock.html" class="nav-link active">自旋锁 (Spinlock)</a>
+            <a href="atomic.html" class="nav-link">原子操作 (Atomic)</a>
+            <a href="semaphore.html" class="nav-link">信号量 (Semaphore)</a>
+            <a href="rcu.html" class="nav-link">RCU</a>
+            <a href="seqlock.html" class="nav-link">顺序锁 (Seqlock)</a>
+            <a href="barrier.html" class="nav-link">内存屏障 (Barrier)</a>
+            <a href="rwbarrier.html" class="nav-link">读写屏障 (RW Barrier)</a>
+        </nav>
+    </div>
+
+    <div class="content">
+        <h1 class="text-3xl font-bold mb-6">自旋锁 (Spinlock)</h1>
+        
+        <div class="card">
+            <div class="card-header">自旋锁概述</div>
+            <div class="card-body">
+                <p class="mb-4">自旋锁是一种锁，线程在尝试获取锁时会执行忙等待（busy-waiting），即线程不会进入睡眠状态，而是会一直占用CPU时间直到锁可用。自旋锁适用于持有锁的时间非常短，且锁竞争不是很激烈的场景。</p>
+                
+                <p class="mb-4">自旋锁的主要特点是：</p>
+                <ul class="list-disc ml-8 mb-4">
+                    <li>不会引起线程或进程的上下文切换</li>
+                    <li>获取锁失败时，会一直占用CPU进行忙等待</li>
+                    <li>适用于锁定时间极短的临界区</li>
+                    <li>在多处理器系统上性能更好</li>
+                    <li>避免了睡眠和唤醒的开销，但会占用CPU资源</li>
+                </ul>
+                
+                <div class="note-box">
+                    <h3 class="font-bold text-lg mb-2">总结</h3>
+                    <p>自旋锁是内核同步机制的基础，其核心在于"快进快出"的临界区设计理念。与睡眠锁不同，自旋锁通过CPU忙等待换取避免上下文切换的时间开销，这一特性让它在锁竞争时间极短的场景中独领风骚。内核自旋锁的演化历史也体现了"简单就是美"的设计哲学，从最初的单变量到后来的ticket自旋锁，再到现代的MCS/Queue自旋锁，追求的都是更高效的原子竞争机制。对于开发者而言，判断使用自旋锁还是睡眠锁的关键在于"持锁时间"，而非"获取锁的难度"。记住，在自旋锁保护的临界区内绝对不能睡眠，这是使用自旋锁的铁律。自旋锁适合于SMP多核架构，但在单核系统中往往需要禁用抢占以避免自锁死锁。这也是为什么内核中自旋锁与抢占往往是一起考虑的要素。自旋锁的代码可能很简单，但背后蕴含的设计思想却深不可测。</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">用户态与内核态自旋锁对比</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-center">用户态 (Pthread Spinlock)</h3>
+                        <table>
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;pthread.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>pthread_spinlock_t</code></td>
+                            </tr>
+                            <tr>
+                                <th>初始化</th>
+                                <td><code>int pthread_spin_init(pthread_spinlock_t *lock, int pshared);</code></td>
+                            </tr>
+                            <tr>
+                                <th>加锁</th>
+                                <td><code>int pthread_spin_lock(pthread_spinlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>尝试加锁</th>
+                                <td><code>int pthread_spin_trylock(pthread_spinlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>解锁</th>
+                                <td><code>int pthread_spin_unlock(pthread_spinlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>销毁</th>
+                                <td><code>int pthread_spin_destroy(pthread_spinlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>返回值</th>
+                                <td>返回0表示成功，非0表示错误码</td>
+                            </tr>
+                            <tr>
+                                <th>共享参数</th>
+                                <td>
+                                    <code>PTHREAD_PROCESS_PRIVATE</code> - 仅同一进程内的线程间共享<br>
+                                    <code>PTHREAD_PROCESS_SHARED</code> - 可在不同进程的线程间共享（需支持共享内存）
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4 text-center">内核态 (Kernel Spinlock)</h3>
+                        <table>
+                            <tr>
+                                <th>头文件</th>
+                                <td><code>#include &lt;linux/spinlock.h&gt;</code></td>
+                            </tr>
+                            <tr>
+                                <th>数据类型</th>
+                                <td><code>spinlock_t</code></td>
+                            </tr>
+                            <tr>
+                                <th>静态初始化</th>
+                                <td><code>DEFINE_SPINLOCK(name);</code></td>
+                            </tr>
+                            <tr>
+                                <th>动态初始化</th>
+                                <td><code>void spin_lock_init(spinlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>加锁</th>
+                                <td><code>void spin_lock(spinlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>尝试加锁</th>
+                                <td><code>int spin_trylock(spinlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>带超时加锁</th>
+                                <td><code>int spin_trylock_timeout(spinlock_t *lock, unsigned long timeout);</code></td>
+                            </tr>
+                            <tr>
+                                <th>中断相关加锁</th>
+                                <td>
+                                    <code>void spin_lock_irq(spinlock_t *lock);</code><br>
+                                    <code>void spin_lock_irqsave(spinlock_t *lock, unsigned long flags);</code><br>
+                                    <code>void spin_lock_bh(spinlock_t *lock);</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>解锁</th>
+                                <td><code>void spin_unlock(spinlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>中断相关解锁</th>
+                                <td>
+                                    <code>void spin_unlock_irq(spinlock_t *lock);</code><br>
+                                    <code>void spin_unlock_irqrestore(spinlock_t *lock, unsigned long flags);</code><br>
+                                    <code>void spin_unlock_bh(spinlock_t *lock);</code>
+                                </td>
+                            </tr>
+                            <tr>
+                                <th>锁定状态检查</th>
+                                <td><code>int spin_is_locked(spinlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>可锁定检查</th>
+                                <td><code>int spin_can_lock(spinlock_t *lock);</code></td>
+                            </tr>
+                            <tr>
+                                <th>特殊变体</th>
+                                <td>
+                                    <code>raw_spin_lock()</code> - 即使在抢占式内核中也不禁用抢占<br>
+                                    <code>_raw_spin_lock()</code> - 不检查在同一CPU上重复获取锁
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">使用场景</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">用户态 (Pthread Spinlock)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>持有锁时间极短的临界区</li>
+                            <li>高性能多线程程序，特别是在多核处理器系统上</li>
+                            <li>在临界区内不会被阻塞或休眠的场景</li>
+                            <li>希望避免线程上下文切换开销的场景</li>
+                            <li>线程优先级反转不是问题的场景</li>
+                            <li>锁竞争不激烈的场合</li>
+                            <li>实时系统中需要确定性行为的锁</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">内核态 (Kernel Spinlock)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>中断处理程序中的临界区保护</li>
+                            <li>内核中需要非常短时间锁定的资源</li>
+                            <li>不能休眠的内核上下文（如中断处理或软中断）</li>
+                            <li>SMP（对称多处理器）环境中的同步</li>
+                            <li>保护不需要长时间持有的数据结构</li>
+                            <li>与中断处理程序共享的数据结构</li>
+                            <li>需要禁用中断或抢占的场景</li>
+                            <li>等待可以预测且极短的场景</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">注意事项</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">用户态 (Pthread Spinlock)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>持有自旋锁时<strong>绝对不要</strong>调用会阻塞的函数</li>
+                            <li>持有时间过长会导致CPU资源浪费</li>
+                            <li>不适合单处理器系统，因为会导致死锁</li>
+                            <li>在单处理器系统上通常会降级为互斥锁实现</li>
+                            <li>过度使用会导致系统响应性降低</li>
+                            <li>自旋锁通常比互斥锁消耗更多的CPU资源</li>
+                            <li>不适合锁竞争激烈的场景</li>
+                            <li>必须确保锁的初始化和销毁正确配对</li>
+                            <li>一般情况下比互斥锁具有更小的内存占用和更低的初始化开销</li>
+                        </ul>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">内核态 (Kernel Spinlock)</h3>
+                        <ul class="list-disc ml-8">
+                            <li>持有自旋锁时<strong>绝对不能</strong>休眠</li>
+                            <li>持有自旋锁时不能调用可能导致休眠的函数（如kmalloc带GFP_KERNEL标志）</li>
+                            <li>临界区应尽可能短，通常不超过几微秒</li>
+                            <li>在单处理器系统上，自旋锁主要用于禁用抢占</li>
+                            <li>使用_irq和_irqsave变体时需要非常小心，确保中断正确恢复</li>
+                            <li>在非抢占式内核中，普通自旋锁只在SMP系统上有效</li>
+                            <li>同一CPU上的同一线程重复获取自旋锁会导致死锁</li>
+                            <li>中断处理程序与其他代码共享数据时，必须使用带irq或irqsave的版本</li>
+                            <li>使用自旋锁时需要考虑与软中断、硬中断和抢占的交互</li>
+                            <li>不同变体（如spin_lock_irq和spin_lock_bh）适用于不同场景</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">使用示例</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">用户态 (Pthread Spinlock)</h3>
+                        <div class="code-block">
+#include &lt;pthread.h&gt;
+#include &lt;stdio.h&gt;
+#include &lt;stdlib.h&gt;
+#include &lt;unistd.h&gt;
+
+#define NUM_THREADS 4
+#define ITERATIONS 1000000
+
+// 共享计数器和自旋锁
+volatile long counter = 0;
+pthread_spinlock_t spinlock;
+
+void* increment_counter(void* thread_id) {
+    long tid = (long)thread_id;
+    int i;
+    
+    printf("Thread %ld starting...\n", tid);
+    
+    for (i = 0; i < ITERATIONS; i++) {
+        // 获取自旋锁
+        pthread_spin_lock(&spinlock);
+        
+        // 临界区 - 非常短的操作
+        counter++;
+        
+        // 释放自旋锁
+        pthread_spin_unlock(&spinlock);
+    }
+    
+    printf("Thread %ld done. Counter = %ld\n", tid, counter);
+    pthread_exit(NULL);
+}
+
+int main() {
+    pthread_t threads[NUM_THREADS];
+    int rc;
+    long t;
+    
+    // 初始化自旋锁
+    if (pthread_spin_init(&spinlock, PTHREAD_PROCESS_PRIVATE) != 0) {
+        printf("ERROR: pthread_spin_init failed\n");
+        exit(1);
+    }
+    
+    // 创建线程
+    for (t = 0; t < NUM_THREADS; t++) {
+        printf("Creating thread %ld\n", t);
+        rc = pthread_create(&threads[t], NULL, increment_counter, (void*)t);
+        if (rc) {
+            printf("ERROR: pthread_create() returned %d\n", rc);
+            exit(-1);
+        }
+    }
+    
+    // 等待所有线程完成
+    for (t = 0; t < NUM_THREADS; t++) {
+        pthread_join(threads[t], NULL);
+    }
+    
+    // 销毁自旋锁
+    pthread_spin_destroy(&spinlock);
+    
+    printf("Final counter value: %ld\n", counter);
+    return 0;
+}
+</div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-xl font-bold mb-4">内核态 (Kernel Spinlock)</h3>
+                        <div class="code-block">
+#include &lt;linux/module.h&gt;
+#include &lt;linux/kernel.h&gt;
+#include &lt;linux/init.h&gt;
+#include &lt;linux/spinlock.h&gt;
+#include &lt;linux/kthread.h&gt;
+#include &lt;linux/delay.h&gt;
+#include &lt;linux/sched.h&gt;
+
+// 定义自旋锁和共享计数器
+static DEFINE_SPINLOCK(my_lock);
+static unsigned long counter = 0;
+
+#define NUM_THREADS 4
+#define ITERATIONS 1000000
+
+static struct task_struct *threads[NUM_THREADS];
+
+// 线程函数
+static int counter_thread(void *data)
+{
+    int id = *(int*)data;
+    int i;
+    
+    printk(KERN_INFO "Spinlock example: Thread %d starting\n", id);
+    
+    for (i = 0; i < ITERATIONS; i++) {
+        // 基本自旋锁用法
+        spin_lock(&my_lock);
+        counter++;
+        spin_unlock(&my_lock);
+        
+        // 让出CPU，避免独占
+        if (i % 1000 == 0)
+            cond_resched();
+    }
+    
+    printk(KERN_INFO "Spinlock example: Thread %d finished\n", id);
+    return 0;
+}
+
+// 演示中断上下文自旋锁用法的函数
+static void demo_irq_spinlock(void)
+{
+    unsigned long flags;
+    
+    // 禁用中断并获取锁
+    spin_lock_irqsave(&my_lock, flags);
+    
+    // 临界区
+    counter += 100;
+    
+    // 释放锁并恢复中断
+    spin_unlock_irqrestore(&my_lock, flags);
+}
+
+// 模块初始化
+static int __init spinlock_example_init(void)
+{
+    int i;
+    static int thread_ids[NUM_THREADS];
+    
+    printk(KERN_INFO "Spinlock example: initializing module\n");
+    
+    // 演示中断上下文用法
+    demo_irq_spinlock();
+    
+    // 创建线程
+    for (i = 0; i < NUM_THREADS; i++) {
+        thread_ids[i] = i;
+        threads[i] = kthread_run(counter_thread, &thread_ids[i], "spinlock_thread_%d", i);
+        if (IS_ERR(threads[i])) {
+            printk(KERN_ERR "Spinlock example: error creating thread %d\n", i);
+            return PTR_ERR(threads[i]);
+        }
+    }
+    
+    return 0;
+}
+
+// 模块清理
+static void __exit spinlock_example_exit(void)
+{
+    int i;
+    
+    // 停止线程
+    for (i = 0; i < NUM_THREADS; i++) {
+        if (threads[i])
+            kthread_stop(threads[i]);
+    }
+    
+    printk(KERN_INFO "Spinlock example: Final counter value: %lu\n", counter);
+    printk(KERN_INFO "Spinlock example: module exiting\n");
+}
+
+module_init(spinlock_example_init);
+module_exit(spinlock_example_exit);
+
+MODULE_LICENSE("GPL");
+MODULE_AUTHOR("Example");
+MODULE_DESCRIPTION("Spinlock usage example");
+</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card">
+            <div class="card-header">实现差异与性能考量</div>
+            <div class="card-body">
+                <div class="grid grid-cols-1 gap-4">
+                    <h3 class="text-xl font-bold mb-4">内部实现差异</h3>
+                    <p class="mb-4">用户态和内核态自旋锁虽然概念相似，但实现和性能特性有显著差异：</p>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <h4 class="text-lg font-bold mb-2">用户态 (Pthread Spinlock)</h4>
+                            <ul class="list-disc ml-8">
+                                <li>通常基于原子指令如Compare-and-Swap (CAS)实现</li>
+                                <li>可能在重试多次后退化为睡眠（依赖于实现）</li>
+                                <li>在一些实现中，单处理器系统可能会简化为不使用原子操作</li>
+                                <li>性能受到用户空间调度器的影响</li>
+                                <li>无法控制硬中断和底层调度</li>
+                            </ul>
+                        </div>
+                        
+                        <div>
+                            <h4 class="text-lg font-bold mb-2">内核态 (Kernel Spinlock)</h4>
+                            <ul class="list-disc ml-8">
+                                <li>多种实现方式：票锁(ticket spinlock)、MCS锁、排队自旋锁等</li>
+                                <li>通常会禁用抢占以防止持有锁的线程被调度出去</li>
+                                <li>与中断处理紧密集成，有特殊的中断安全变体</li>
+                                <li>架构特定的优化，如处理器特定的内存屏障和原子操作</li>
+                                <li>可以结合使用处理器特定的暂停指令(如x86的PAUSE)以减少功耗</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <h3 class="text-xl font-bold mt-6 mb-4">性能考量</h3>
+                    <ul class="list-disc ml-8">
+                        <li><strong>适用场景</strong>：自旋锁仅适合锁定时间非常短的场景，如果临界区执行时间超过上下文切换的开销，互斥锁通常是更好的选择</li>
+                        <li><strong>处理器数量</strong>：自旋锁在多处理器系统上性能最佳，单处理器系统上自旋等待可能导致资源浪费</li>
+                        <li><strong>锁争用</strong>：高度争用的锁使用自旋锁可能导致大量CPU时间浪费在忙等待上</li>
+                        <li><strong>能耗考虑</strong>：自旋锁会持续消耗CPU资源，在电池供电设备上可能不是最佳选择</li>
+                        <li><strong>可预测性</strong>：自旋锁提供更确定的等待时间，对实时系统有益</li>
+                        <li><strong>缓存行共享</strong>：频繁争用的自旋锁可能导致缓存行乒乓(cache line ping-pong)，降低多核系统性能</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <footer class="mt-8 text-center text-gray-500 text-sm">
+            <p>© 2025 Linux同步原语对比 - 本网站仅供学习参考</p>
+        </footer>
+    </div>
+<script>window.parent.postMessage({ action: "ready" }, "*"); 
+ 
+window.console = new Proxy(console, {
+  get(target, prop) {
+    if (['log', 'warn', 'error'].includes(prop)) {
+      return new Proxy(target[prop], {
+        apply(fn, thisArg, args) {
+          fn.apply(thisArg, args);
+          window.parent.postMessage({ action: 'console', 
+            type: prop, 
+            args: args.map((arg) => {
+              try {
+                return JSON.stringify(arg).replace(/^["']|["']$/g, '');
+              } catch (e) {
+                return arg;
+              }
+            }) 
+          }, '*');
+        }
+      });
+    }
+    return target[prop];
+  }
+});
+</script></body>
+</html>
