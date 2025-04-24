@@ -1,0 +1,126 @@
+const mainlineInfo = {
+    title: '主线信息',
+    items: [
+        {
+            label: '主线负责人',
+            type: 'copy',
+            content: 'test@163.com'
+        },
+        {
+            label: '主线说明',
+            type: 'text',
+            content: '主线代码库，用于新特性开发'
+        }
+    ]
+};
+
+const branchData = {
+    trunk_b75: {
+        id: 'trunk',
+        title: '主线 TRUNK（V7R31）',
+        description: '主干开发分支，用于新特性开发',
+        items: [
+            {
+                label: 'CI命令',
+                type: 'copy',
+                content: ' -e cre.ipe -s -r '
+            },
+            {
+                label: 'DRV库地址',
+                type: 'copy',
+                content: 'http://10.165.104.66/DRV'
+            },
+            {
+                label: 'PUBLIC库地址',
+                type: 'copy',
+                content: 'http://10.153.120.104/PUBLIC'
+            },
+            {
+                label: '北京编译lib地址',
+                type: 'copy',
+                content: '-d /var/mntcmmold/trunk/'
+            },
+            {
+                label: '杭州编译lib地址',
+                type: 'copy',
+                content: '-d /mnt/cilib_old/trunk/'
+            },
+            {
+                label: '文件服务器地址',
+                type: 'copy',
+                content: 'file://10.153.3.125/trunk/'
+            },
+            {
+                label: '标题模板(普通)',
+                type: 'copy',
+                content: '【产品Trunk】【模块 问题级别】'
+            },
+            {
+                label: '标题模板(BRAS)',
+                type: 'copy',
+                content: '【产品Trunk】【模块 问题级别】'
+            },
+            {
+                label: '审批人',
+                type: 'copy',
+                content: 'test1@163.com'
+            }
+        ]
+    },
+    d086sp: {
+        id: 'sp',
+        title: '维护',
+        description: 'SP维护分支，用于问题修复',
+        items: [
+            {
+                label: 'CI命令',
+                type: 'copy',
+                content: '-e ce.ipe  -r'
+            },
+            {
+                label: 'DRV库地址',
+                type: 'copy',
+                content: 'http://10.165.104.66/trunk/DRV'
+            },
+            {
+                label: 'PUBLIC库地址',
+                type: 'copy',
+                content: 'http://10.153.120.104/trunk/PUBLIC'
+            },
+            {
+                label: '北京编译lib地址',
+                type: 'copy',
+                content: '-d /var/mntcmmold/trunk/'
+            },
+            {
+                label: '杭州编译lib地址',
+                type: 'copy',
+                content: '-d /mnt/trunk/'
+            },
+            {
+                label: '文件服务器地址',
+                type: 'copy',
+                content: 'file://10.153.3.125/trunk/'
+            },
+            {
+                label: '标题模板(普通)',
+                type: 'copy',
+                content: '【SP维护分支】【模块 问题级别】'
+            },
+            {
+                label: '标题模板(BRAS)',
+                type: 'copy',
+                content: '【SP维护分支】【模块 问题级别】'
+            },
+            {
+                label: '审批人',
+                type: 'copy',
+                content: 'test2@h3c.com'
+            }
+        ]
+    },
+};
+
+
+// 确保数据可以被其他文件访问  
+window.branchData = branchData;
