@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindDoc 语义搜索</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/css/bootstrap.min.css">
+    <style>
+        body {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            background-color: #f8f9fa;
+        }
+        .search-container {
+            max-width: 850px;
+            margin: 0 auto;
+            padding: 1rem;
+        }
+        .result-item {
+            background-color: white;
+            border-radius: 5px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            transition: transform 0.2s;
+            border-left: 4px solid transparent;
+        }
+        .result-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .result-item.high-score {
+            border-left-color: #28a745;
+        }
+        .result-item.medium-score {
+            border-left-color: #17a2b8;
+        }
+        .result-item.low-score {
+            border-left-color: #ffc107;
+        }
+        .result-title {
+            color: #1a0dab;
+            margin-bottom: 0.5rem;
+        }
+        .result-book {
+            color: #006621;
+            font-size: 0.9rem;
+            margin-bottom: 0.5rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .result-summary {
+            font-size: 0.9rem;
+            color: #4d5156;
+            margin-bottom: 0.5rem;
+            line-height: 1.5;
+        }
+        .result-url {
+            color: #808080;
+            font-size: 0.8rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+        .loading {
+            text-align: center;
+            padding: 2rem;
+            display: none;
+        }
+        .loader {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .search-form {
+            margin-bottom: 2rem;
+        }
+        .debug-tools {
+            margin-top: 3rem;
+            border-top: 1px solid #ddd;
+            padding-top: 1rem;
+        }
+        .message-container {
+            margin-bottom: 1rem;
+        }
+        .search-stats {
+            font-size: 0.9rem;
+            color: #666;
+            margin-bottom: 1rem;
+        }
+        .similarity-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-weight: normal;
+        }
+        .similarity-high {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .similarity-medium {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+        .similarity-low {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        .pagination-container {
+            margin-top: 1.5rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            justify-content: center;
+        }
+        .pagination .page-item.active .page-link {
+            background-color: #0d6efd;
+            border-color: #0d6efd;
+        }
+        .pagination .page-link {
+            color: #0d6efd;
+        }
+        .pagination .page-link:focus {
+            box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+        }
+        .pagination-info {
+            text-align: center;
+            color: #6c757d;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+        /* 移动端适配 */
+        @media (max-width: 576px) {
+            .result-book {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+            .similarity-badge {
+                margin-top: 0.3rem;
+            }
+            .pagination .page-link {
+                padding: 0.375rem 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container search-container">
+        <h1 class="text-center mb-4">MindDoc 语义搜索</h1>
+        
+        <form id="searchForm" class="search-form">
+            <div class="input-group mb-3">
+                <input type="text" id="queryInput" class="form-control" placeholder="输入搜索关键词..." autocomplete="off">
+                <button class="btn btn-primary" type="submit">搜索</button>
+            </div>
+        </form>
+        
+        <div id="messageContainer" class="message-container alert" style="display: none;"></div>
+        
+        <div id="searchStats" class="search-stats" style="display: none;"></div>
+        
+        <div id="loading" class="loading">
+            <div class="loader"></div>
+            <p class="mt-3">正在搜索...</p>
+        </div>
+        
+        <div id="searchResults"></div>
+        
+        <div id="paginationInfo" class="pagination-info" style="display: none;"></div>
+        
+        <div id="paginationContainer" class="pagination-container" style="display: none;">
+            <ul id="pagination" class="pagination"></ul>
+        </div>
+        
+        <!-- 调试工具 -->
+        <div class="debug-tools">
+            <h5>调试工具</h5>
+            <div class="btn-group mb-3">
+                <button id="btnConfig" class="btn btn-sm btn-outline-secondary">查看配置</button>
+                <button id="btnDbInfo" class="btn btn-sm btn-outline-secondary">查看数据库信息</button>
+                <button id="btnVectorDb" class="btn btn-sm btn-outline-secondary">查看向量数据库</button>
+                <button id="btnRebuildIndex" class="btn btn-sm btn-outline-danger">重建索引</button>
+            </div>
+            <div id="debugOutput" class="mt-3 p-3 bg-light" style="display: none; max-height: 400px; overflow: auto; border-radius: 5px;">
+                <pre id="debugContent"></pre>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 全局变量
+        let allResults = []; // 存储所有搜索结果
+        let currentPage = 1; // 当前页码
+        const resultsPerPage = 10; // 每页显示结果数量
+        let totalPages = 0; // 总页数
+        
+        // 提交搜索表单
+        document.getElementById('searchForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const query = document.getElementById('queryInput').value.trim();
+            if (!query) return;
+            
+            // 重置分页
+            currentPage = 1;
+            
+            // 隐藏任何消息和统计信息
+            document.getElementById('messageContainer').style.display = 'none';
+            document.getElementById('searchStats').style.display = 'none';
+            document.getElementById('paginationContainer').style.display = 'none';
+            document.getElementById('paginationInfo').style.display = 'none';
+            
+            // 显示加载状态
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('searchResults').innerHTML = '';
+            
+            // 发送搜索请求
+            const formData = new FormData();
+            formData.append('query', query);
+            
+            fetch('/search', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('loading').style.display = 'none';
+                
+                const resultsContainer = document.getElementById('searchResults');
+                
+                // 处理错误或警告消息
+                if (data.error || data.warning || data.message) {
+                    const msgContainer = document.getElementById('messageContainer');
+                    msgContainer.innerHTML = data.error || data.warning || data.message;
+                    msgContainer.className = 'message-container alert ' + 
+                        (data.error ? 'alert-danger' : (data.warning ? 'alert-warning' : 'alert-info'));
+                    msgContainer.style.display = 'block';
+                }
+                
+                // 显示统计信息
+                if (data.count !== undefined && data.time !== undefined) {
+                    const statsContainer = document.getElementById('searchStats');
+                    statsContainer.innerHTML = `找到 ${data.count} 条结果，耗时 ${data.time} 秒`;
+                    statsContainer.style.display = 'block';
+                }
+                
+                if (!data.results || data.results.length === 0) {
+                    resultsContainer.innerHTML = '<div class="alert alert-info">没有找到相关结果</div>';
+                    return;
+                }
+                
+                // 存储所有结果
+                allResults = data.results;
+                
+                // 计算总页数
+                totalPages = Math.ceil(allResults.length / resultsPerPage);
+                
+                // 显示当前页结果
+                displayResultsPage(currentPage);
+                
+                // 构建分页导航
+                buildPagination();
+                
+                // 更新分页信息
+                updatePaginationInfo();
+            })
+            .catch(error => {
+                document.getElementById('loading').style.display = 'none';
+                
+                const msgContainer = document.getElementById('messageContainer');
+                msgContainer.innerHTML = '搜索时发生错误，请稍后再试';
+                msgContainer.className = 'message-container alert alert-danger';
+                msgContainer.style.display = 'block';
+                
+                console.error('搜索错误:', error);
+            });
+        });
+        
+        // 显示指定页的结果
+        function displayResultsPage(page) {
+            const resultsContainer = document.getElementById('searchResults');
+            resultsContainer.innerHTML = '';
+            
+            // 计算当前页的起始和结束索引
+            const startIndex = (page - 1) * resultsPerPage;
+            const endIndex = Math.min(startIndex + resultsPerPage, allResults.length);
+            
+            // 获取当前页的结果
+            const pageResults = allResults.slice(startIndex, endIndex);
+            
+            // 构建结果列表
+            let resultsHtml = '';
+            pageResults.forEach((result, index) => {
+                // 重新计算在当前页中的序号
+                const displayIndex = startIndex + index + 1;
+                
+                // 确定相似度等级
+                let scoreClass = 'low-score';
+                let badgeClass = 'similarity-low';
+                
+                if (result.similarity >= 85) {
+                    scoreClass = 'high-score';
+                    badgeClass = 'similarity-high';
+                } else if (result.similarity >= 65) {
+                    scoreClass = 'medium-score';
+                    badgeClass = 'similarity-medium';
+                }
+                
+                // 准备调试信息
+                let debugInfo = '';
+                if (result.base_similarity !== undefined && result.keyword_boost !== undefined) {
+                    debugInfo = `<div class="debug-info small text-muted mt-1">
+                        <span title="基础语义相似度">基础: ${result.base_similarity}%</span> + 
+                        <span title="关键词匹配提升">匹配: ${result.keyword_boost}%</span>
+                        ${result.title_matches !== undefined ? ` (标题匹配: ${result.title_matches}, 内容匹配: ${result.content_matches})` : ''}
+                    </div>`;
+                }
+                
+                resultsHtml += `
+                    <div class="result-item ${scoreClass}">
+                        <h5 class="result-title">${displayIndex}. <a href="${result.url}" target="_blank">${result.title}</a></h5>
+                        <div class="result-book">
+                            <span>文档集: ${result.book_name}</span>
+                            <span class="similarity-badge ${badgeClass}">相关度: ${result.similarity}%</span>
+                        </div>
+                        <div class="result-summary">${result.summary}</div>
+                        <div class="result-url">
+                            <a href="${result.url}" target="_blank">${result.url}</a>
+                        </div>
+                        ${debugInfo}
+                    </div>
+                `;
+            });
+            
+            resultsContainer.innerHTML = resultsHtml;
+        }
+        
+        // 构建分页导航
+        function buildPagination() {
+            const paginationElement = document.getElementById('pagination');
+            paginationElement.innerHTML = '';
+            
+            // 如果只有一页，不显示分页
+            if (totalPages <= 1) {
+                document.getElementById('paginationContainer').style.display = 'none';
+                return;
+            }
+            
+            // 显示分页容器
+            document.getElementById('paginationContainer').style.display = 'flex';
+            
+            // 添加"上一页"按钮
+            const prevLi = document.createElement('li');
+            prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
+            const prevLink = document.createElement('a');
+            prevLink.className = 'page-link';
+            prevLink.href = '#';
+            prevLink.innerHTML = '&laquo;';
+            prevLink.setAttribute('aria-label', '上一页');
+            if (currentPage > 1) {
+                prevLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    goToPage(currentPage - 1);
+                });
+            }
+            prevLi.appendChild(prevLink);
+            paginationElement.appendChild(prevLi);
+            
+            // 确定要显示的页码范围
+            let startPage = Math.max(1, currentPage - 2);
+            let endPage = Math.min(totalPages, startPage + 4);
+            
+            // 调整起始页，确保始终显示 5 个页码（如果有那么多页）
+            if (endPage - startPage < 4 && totalPages > 5) {
+                startPage = Math.max(1, endPage - 4);
+            }
+            
+            // 添加第一页按钮（如果需要）
+            if (startPage > 1) {
+                const firstLi = document.createElement('li');
+                firstLi.className = 'page-item';
+                const firstLink = document.createElement('a');
+                firstLink.className = 'page-link';
+                firstLink.href = '#';
+                firstLink.textContent = '1';
+                firstLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    goToPage(1);
+                });
+                firstLi.appendChild(firstLink);
+                paginationElement.appendChild(firstLi);
+                
+                // 如果第一页和起始页之间有间隔，添加省略号
+                if (startPage > 2) {
+                    const ellipsisLi = document.createElement('li');
+                    ellipsisLi.className = 'page-item disabled';
+                    const ellipsisSpan = document.createElement('span');
+                    ellipsisSpan.className = 'page-link';
+                    ellipsisSpan.innerHTML = '&hellip;';
+                    ellipsisLi.appendChild(ellipsisSpan);
+                    paginationElement.appendChild(ellipsisLi);
+                }
+            }
+            
+            // 添加页码按钮
+            for (let i = startPage; i <= endPage; i++) {
+                const pageLi = document.createElement('li');
+                pageLi.className = `page-item ${i === currentPage ? 'active' : ''}`;
+                
+                const pageLink = document.createElement('a');
+                pageLink.className = 'page-link';
+                pageLink.href = '#';
+                pageLink.textContent = i;
+                
+                if (i !== currentPage) {
+                    pageLink.addEventListener('click', function(e) {
+                        e.preventDefault();
+                        goToPage(i);
+                    });
+                }
+                
+                pageLi.appendChild(pageLink);
+                paginationElement.appendChild(pageLi);
+            }
+            
+            // 如果结束页和最后一页之间有间隔，添加省略号
+            if (endPage < totalPages - 1) {
+                const ellipsisLi = document.createElement('li');
+                ellipsisLi.className = 'page-item disabled';
+                const ellipsisSpan = document.createElement('span');
+                ellipsisSpan.className = 'page-link';
+                ellipsisSpan.innerHTML = '&hellip;';
+                ellipsisLi.appendChild(ellipsisSpan);
+                paginationElement.appendChild(ellipsisLi);
+            }
+            
+            // 添加最后一页按钮（如果需要）
+            if (endPage < totalPages) {
+                const lastLi = document.createElement('li');
+                lastLi.className = 'page-item';
+                const lastLink = document.createElement('a');
+                lastLink.className = 'page-link';
+                lastLink.href = '#';
+                lastLink.textContent = totalPages;
+                lastLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    goToPage(totalPages);
+                });
+                lastLi.appendChild(lastLink);
+                paginationElement.appendChild(lastLi);
+            }
+            
+            // 添加"下一页"按钮
+            const nextLi = document.createElement('li');
+            nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
+            const nextLink = document.createElement('a');
+            nextLink.className = 'page-link';
+            nextLink.href = '#';
+            nextLink.innerHTML = '&raquo;';
+            nextLink.setAttribute('aria-label', '下一页');
+            if (currentPage < totalPages) {
+                nextLink.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    goToPage(currentPage + 1);
+                });
+            }
+            nextLi.appendChild(nextLink);
+            paginationElement.appendChild(nextLi);
+        }
+        
+        // 更新分页信息文本
+        function updatePaginationInfo() {
+            const infoElement = document.getElementById('paginationInfo');
+            
+            if (allResults.length === 0) {
+                infoElement.style.display = 'none';
+                return;
+            }
+            
+            const startIndex = (currentPage - 1) * resultsPerPage + 1;
+            const endIndex = Math.min(startIndex + resultsPerPage - 1, allResults.length);
+            
+            infoElement.textContent = `显示第 ${startIndex} - ${endIndex} 条，共 ${allResults.length} 条结果`;
+            infoElement.style.display = 'block';
+        }
+        
+        // 跳转到指定页面
+        function goToPage(page) {
+            if (page < 1 || page > totalPages || page === currentPage) {
+                return;
+            }
+            
+            currentPage = page;
+            displayResultsPage(currentPage);
+            buildPagination();
+            updatePaginationInfo();
+            
+            // 滚动到页面顶部
+            window.scrollTo({
+                top: document.getElementById('searchStats').offsetTop - 20,
+                behavior: 'smooth'
+            });
+        }
+        
+        // 调试工具功能
+        document.getElementById('btnConfig').addEventListener('click', function() {
+            fetchDebugInfo('/debug/config');
+        });
+        
+        document.getElementById('btnDbInfo').addEventListener('click', function() {
+            fetchDebugInfo('/debug/db-info');
+        });
+        
+        document.getElementById('btnVectorDb').addEventListener('click', function() {
+            fetchDebugInfo('/debug/vector-db');
+        });
+        
+        document.getElementById('btnRebuildIndex').addEventListener('click', function() {
+            if (confirm('确定要重建索引吗？这个过程可能需要一些时间。')) {
+                // 显示加载状态
+                document.getElementById('loading').style.display = 'block';
+                document.getElementById('debugOutput').style.display = 'none';
+                
+                fetch('/rebuild-index', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    const msgContainer = document.getElementById('messageContainer');
+                    if (data.success) {
+                        msgContainer.innerHTML = `${data.message}，共索引了 ${data.document_count} 个文档`;
+                        msgContainer.className = 'message-container alert alert-success';
+                    } else {
+                        msgContainer.innerHTML = `索引重建失败: ${data.error}`;
+                        msgContainer.className = 'message-container alert alert-danger';
+                    }
+                    msgContainer.style.display = 'block';
+                })
+                .catch(error => {
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    const msgContainer = document.getElementById('messageContainer');
+                    msgContainer.innerHTML = '重建索引出错，请查看控制台';
+                    msgContainer.className = 'message-container alert alert-danger';
+                    msgContainer.style.display = 'block';
+                    
+                    console.error('重建索引错误:', error);
+                });
+            }
+        });
+        
+        function fetchDebugInfo(url) {
+            document.getElementById('debugOutput').style.display = 'block';
+            document.getElementById('debugContent').textContent = '加载中...';
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('debugContent').textContent = JSON.stringify(data, null, 2);
+                })
+                .catch(error => {
+                    document.getElementById('debugContent').textContent = '获取调试信息失败: ' + error;
+                });
+        }
+    </script>
+</body>
+</html>
